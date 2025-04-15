@@ -1207,44 +1207,46 @@ class CoordAtt(nn.Module):
 
 
 class Conv(nn.Module):
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
+    # Standard convolution with batch normalization and activation
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):
         super().__init__()
-        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)
+        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
         self.bn = nn.BatchNorm2d(c2)
-        self.act = nn.SiLU() if act is True else act if isinstance(act, nn.Module) else nn.Identity()
+        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
 
-    def forward_fuse(self, x):
+    def fuseforward(self, x):
         return self.act(self.conv(x))
 
 
-def autopad(k, p=None, d=1):
-    if d > 1:
-        k = d * (k - 1) + 1 if isinstance(k, int) else [d * (x - 1) + 1 for x in k]
+def autopad(k, p=None):
+    # Calculate padding based on kernel size
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]
     return p
 
 
 class SPPFCSPC(nn.Module):
+    # Spatial Pyramid Pooling - Fast (SPPF) with CSP (Cross Stage Partial Networks)
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5, k=5):
-        super(SPPFCSPC, self).__init__()
-        c_ = int(2 * c2 * e)  # hidden channels
-        self.cv1 = Conv(c1, c_, 1, 1)
-        self.cv2 = Conv(c1, c_, 1, 1)
-        self.cv3 = Conv(c_, c_, 3, 1)
-        self.cv4 = Conv(c_, c_, 1, 1)
-        self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
-        self.cv5 = Conv(4 * c_, c_, 1, 1)
-        self.cv6 = Conv(c_, c_, 3, 1)
-        self.cv7 = Conv(2 * c_, c2, 1, 1)
+        super().__init__()
+        hidden_channels = int(2 * c2 * e)  # Hidden channels
+        self.conv1 = Conv(c1, hidden_channels, 1, 1)
+        self.conv2 = Conv(c1, hidden_channels, 1, 1)
+        self.conv3 = Conv(hidden_channels, hidden_channels, 3, 1)
+        self.conv4 = Conv(hidden_channels, hidden_channels, 1, 1)
+        self.max_pool = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.conv5 = Conv(4 * hidden_channels, hidden_channels, 1, 1)
+        self.conv6 = Conv(hidden_channels, hidden_channels, 3, 1)
+        self.conv7 = Conv(2 * hidden_channels, c2, 1, 1)
 
     def forward(self, x):
-        x1 = self.cv4(self.cv3(self.cv1(x)))
-        x2 = self.m(x1)
-        x3 = self.m(x2)
-        y1 = self.cv6(self.cv5(torch.cat((x1, x2, x3, self.m(x3)), 1)))
-        y2 = self.cv2(x)
-        return self.cv7(torch.cat((y1, y2), dim=1))
+        x1 = self.conv4(self.conv3(self.conv1(x)))  # First branch
+        x2 = self.max_pool(x1)
+        x3 = self.max_pool(x2)
+        x4 = self.max_pool(x3)
+        y1 = self.conv6(self.conv5(torch.cat((x1, x2, x3, x4), 1)))  # Concatenate and process
+        y2 = self.conv2(x)  # Second branch
+        return self.conv7(torch.cat((y1, y2), dim=1))  # Final concatenation and output
