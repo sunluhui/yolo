@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 # 加载训练好的模型
-model = YOLO('runs/detect/train3/weights/best.pt')
+model = YOLO('runs/detect/train5/weights/best.pt')
 
 # 在测试集上进行评估
 metrics = model.val(
