@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 # 加载训练好的模型
-model = YOLO('runs/detect/train10/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
+model = YOLO('runs/detect/train11/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
 
 # 在测试集上进行评估
 metrics = model.val(
