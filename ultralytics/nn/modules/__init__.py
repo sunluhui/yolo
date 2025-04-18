@@ -164,9 +164,11 @@ __all__ = (
     "EMA_attention",
     "SPPFCSPC",
     "DWR",
+    "Detect_AFPN4",
 )
 from .simam import SimAM
 from .conv import EMA_attention
 from .dwr import DWR  # 新增导入
+from .AFPN import Detect_AFPN4
 
 
