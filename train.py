@@ -5,7 +5,7 @@ model = YOLO(model='yolov8n-AFPN4.yaml', task='detect')
 
 # 训练参数
 model.train(
-    data='VisDrone.yaml',  # 数据集配置文件
+    data='coco.yaml',  # 数据集配置文件
     epochs=200,
     imgsz=640,
     batch=12,  # 可设置为更小的，占据更少的空间。
