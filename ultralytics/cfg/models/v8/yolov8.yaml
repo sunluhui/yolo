@@ -54,4 +54,4 @@ head:
   - [-1, 1, EMA_attention, [1024]]
 
 
-  - [[16, 20, 24], 1, Detect, [nc]] # Detect(P3, P4, P5)
+  - [[16, 20, 24], 1, Detect_AFPN4, [nc, 128]]  # Detect(P3, P4, P5)
