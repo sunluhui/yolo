@@ -3,8 +3,9 @@ import torch.nn as nn
 
 
 class SimAM(torch.nn.Module):
-    def __init__(self, e_lambda=1e-4):
+    def __init__(self, channels, e_lambda=1e-4):
         super(SimAM, self).__init__()
+        self.channels = channels  # 添加通道参数记录
         self.activation = nn.Sigmoid()
         self.e_lambda = e_lambda
 

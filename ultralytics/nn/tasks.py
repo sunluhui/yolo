@@ -1038,15 +1038,15 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         elif m in {CBAM}:
             c2 = ch[f]
             args = [c2, *args]
-        elif m in {CoordAtt}:
-            c1, c2 = ch[f], args[0]
-            if c2 != nc:
-                c2 = make_divisible(min(c2, max_channels) * width, 8)
-            args = [c1, *args[1:]]
+        #elif m in {CoordAtt}:
+            #c1, c2 = ch[f], args[0]
+            #if c2 != nc:
+                #c2 = make_divisible(min(c2, max_channels) * width, 8)
+            #args = [c1, *args[1:]]
         elif m in (BiFormerBlock,):
             args = [ch[f], *args[1:]]
-        elif m in {SimAM}:
-            c2 = ch[f]
+        #elif m in {SimAM}:
+            #c2 = ch[f]
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):
@@ -1079,10 +1079,13 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
-        elif m in {Concat, BiFPN_Concat2, BiFPN_Concat3}:
+        elif m in {Concat, BiFPN_Concat2}:#去除BiFPN_Concat3
             c2 = sum(ch[x] for x in f)
-        elif m in {EMA_attention}:
-            args = [ch[f], *args]
+        #elif m in {EMA_attention}:
+            #args = [ch[f], *args]
+        # 在parse_model函数中添加以下case
+        elif m in (SimAM, CoordAtt, EMA_attention, BiFPN_Concat3):
+            args = [ch[f]]
         else:
             c2 = ch[f]
 

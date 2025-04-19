@@ -1163,23 +1163,23 @@ class h_sigmoid(nn.Module):
 
 
 class CoordAtt(nn.Module):
-    def __init__(self, inp_channels, reduction=32):
+    def __init__(self, channels, reduction=32):
         super().__init__()
         # 水平/垂直方向的特征池化
         self.pool_h = nn.AdaptiveAvgPool2d((None, 1))  # 输出形状 [H,1]
         self.pool_w = nn.AdaptiveAvgPool2d((1, None))  # 输出形状 [1,W]
 
         # 中间层通道数计算（至少保留8通道）
-        mid_channels = max(inp_channels // reduction, 8)
+        mid_channels = max(channels // reduction, 8)
 
         # 特征转换层
-        self.conv1 = nn.Conv2d(inp_channels, mid_channels, kernel_size=1, bias=False)
+        self.conv1 = nn.Conv2d(channels, mid_channels, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(mid_channels)
         self.act = h_sigmoid()
 
         # 注意力生成层
-        self.conv_h = nn.Conv2d(mid_channels, inp_channels, kernel_size=1, bias=False)
-        self.conv_w = nn.Conv2d(mid_channels, inp_channels, kernel_size=1, bias=False)
+        self.conv_h = nn.Conv2d(mid_channels, channels, kernel_size=1, bias=False)
+        self.conv_w = nn.Conv2d(mid_channels, channels, kernel_size=1, bias=False)
 
     def forward(self, x):
         identity = x  # 保留原始特征

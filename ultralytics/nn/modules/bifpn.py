@@ -29,10 +29,14 @@ class BiFPN_Concat3(nn.Module):
         self.epsilon = 0.0001
 
     def forward(self, x):
-        w = self.w
-        weight = w / (torch.sum(w, dim=0) + self.epsilon)  # 将权重进行归一化
-        # Fast normalized fusion
-        x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
+        if not isinstance(x, list) or len(x) != 3:  # 强制检查3个输入
+            raise ValueError(f"BiFPN_Concat3需要3个输入，当前收到{len(x)}个")
+
+        # 归一化权重
+        w = self.w / (torch.sum(self.w, dim=0) + self.epsilon)
+
+        # 加权融合
+        x = [w[0] * x[0], w[1] * x[1], w[2] * x[2]]
         return torch.cat(x, self.d)
 
 
