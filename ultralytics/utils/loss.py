@@ -207,26 +207,15 @@ class v8DetectionLoss:
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
     def __call__(self, preds, batch):
-        """Calculate the sum of the loss for box, cls, and dfl multiplied by batch size."""
+        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
+        pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
+        )
 
-        # 重塑特征图形状：[B, anchors_per_layer, no_per_anchor, H*W]
-        reshaped_feats = []
-        for xi in feats:
-            batch_size, _, h, w = xi.shape
-            xi_reshaped = xi.view(batch_size, self.anchors_per_layer, self.no, h * w)
-            reshaped_feats.append(xi_reshaped)
-
-        # 拼接所有特征图的空间维度（H*W）
-        feats_concat = torch.cat(reshaped_feats, dim=3)  # [B, anchors, no, total_HW]
-
-        # 分割为回归（distri）和分类（scores）部分
-        pred_distri, pred_scores = feats_concat.split((self.reg_max * 4, self.nc), dim=2)
-
-        # 调整维度用于后续计算
-        pred_distri = pred_distri.permute(0, 1, 3, 2).contiguous()  # [B, anchors, total_HW, reg_max*4]
-        pred_scores = pred_scores.permute(0, 1, 3, 2).contiguous()  # [B, anchors, total_HW, nc]
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
