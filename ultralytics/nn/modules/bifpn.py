@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from ultralytics.nn.modules import Conv
+
 
 class BiFPN_Concat2(nn.Module):
     def __init__(self, dimension=1):
@@ -18,25 +20,24 @@ class BiFPN_Concat2(nn.Module):
 
 
 # 三个分支concat操作
+# ultralytics/nn/modules/bifpn.py
 class BiFPN_Concat3(nn.Module):
-    def __init__(self, dimension=1):
-        super(BiFPN_Concat3, self).__init__()
+    def __init__(self, c1, c2, c3, dimension=1):  # 显式接收三个输入通道参数
+        super().__init__()
         self.d = dimension
-        # 设置可学习参数 nn.Parameter的作用是：将一个不可训练的类型Tensor转换成可以训练的类型parameter
-        # 并且会向宿主模型注册该参数 成为其一部分 即model.parameters()会包含这个parameter
-        # 从而在参数优化的时候可以自动一起优化
-        self.w = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        self.w = nn.Parameter(torch.ones(3, dtype=torch.float32))
         self.epsilon = 0.0001
 
+        # 通道对齐卷积（可选）
+        self.conv1 = Conv(c1, c1, 1) if c1 != c2 else nn.Identity()
+        self.conv2 = Conv(c2, c2, 1) if c2 != c3 else nn.Identity()
+
     def forward(self, x):
-        if not isinstance(x, list) or len(x) != 3:  # 强制检查3个输入
-            raise ValueError(f"BiFPN_Concat3需要3个输入，当前收到{len(x)}个")
+        x0 = self.conv1(x[0])
+        x1 = self.conv2(x[1])
+        x2 = x[2]
 
-        # 归一化权重
         w = self.w / (torch.sum(self.w, dim=0) + self.epsilon)
-
-        # 加权融合
-        x = [w[0] * x[0], w[1] * x[1], w[2] * x[2]]
-        return torch.cat(x, self.d)
+        return torch.cat([w[0] * x0, w[1] * x1, w[2] * x2], self.d)
 
 

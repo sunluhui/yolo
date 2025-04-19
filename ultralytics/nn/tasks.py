@@ -1084,8 +1084,10 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         #elif m in {EMA_attention}:
             #args = [ch[f], *args]
         # 在parse_model函数中添加以下case
-        elif m in (SimAM, CoordAtt, EMA_attention, BiFPN_Concat3):
+        elif m in {SimAM, CoordAtt, EMA_attention}:
             args = [ch[f]]
+        elif m is BiFPN_Concat3:
+            args = [ch[x] for x in f]  # 处理多输入通道参数
         else:
             c2 = ch[f]
 
