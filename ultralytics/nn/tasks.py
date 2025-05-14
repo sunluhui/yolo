@@ -61,7 +61,7 @@ from ultralytics.nn.modules import (
     Segment,
     TorchVision,
     WorldDetect,
-    v10Detect, EMA_attention, SimAM,Detect_AFPN4,
+    v10Detect, EMA_attention, SimAM,Detect_AFPN4,A2C2f,
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import  BiFPN_Concat2, BiFPN_Concat3
@@ -986,6 +986,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2fCIB,
             SPPFCSPC,
             DWR,
+            A2C2f,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1035,6 +1036,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 legacy = False
                 if scale in "mlx":
                     args[3] = True
+            if m is A2C2f:
+                legacy = False
+                if scale in "lx":  # for L/X sizes
+                    args.append(True)
+                    args.append(1.5)
         elif m in {CBAM}:
             c2 = ch[f]
             args = [c2, *args]

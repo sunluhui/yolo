@@ -57,6 +57,7 @@ from .block import (
     SCDown,
     TorchVision,
     SPPFCSPC,
+    A2C2f,
 )
 from .conv import (
     CBAM,
@@ -165,6 +166,7 @@ __all__ = (
     "SPPFCSPC",
     "DWR",
     "Detect_AFPN4",
+    "A2C2f",
 )
 from .simam import SimAM
 from .conv import EMA_attention
