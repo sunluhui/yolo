@@ -172,5 +172,3 @@ from .simam import SimAM
 from .conv import EMA_attention
 from .dwr import DWR  # 新增导入
 from .AFPN import Detect_AFPN4
-
-
