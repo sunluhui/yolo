@@ -1209,7 +1209,11 @@ class AAttn(nn.Module):
             v = v.reshape(B * self.area, N // self.area, C)
             B, N, _ = qk.shape
         q, k = qk.split([C, C], dim=2)
-
+        try:
+            import flash_attn  # 检查是否安装了flash_attn库
+            USE_FLASH_ATTN = True
+        except ImportError:
+            USE_FLASH_ATTN = False
         if x.is_cuda and USE_FLASH_ATTN:
             q = q.view(B, N, self.num_heads, self.head_dim)
             k = k.view(B, N, self.num_heads, self.head_dim)
