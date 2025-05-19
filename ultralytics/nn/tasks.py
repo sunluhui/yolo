@@ -61,7 +61,7 @@ from ultralytics.nn.modules import (
     Segment,
     TorchVision,
     WorldDetect,
-    v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock,
+    v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention,
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import  BiFPN_Concat2, BiFPN_Concat3
@@ -989,6 +989,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             A2C2f,
             SEBlock,
             ECABlock,
+            GAMAttention,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
