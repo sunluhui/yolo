@@ -171,6 +171,7 @@ __all__ = (
     "SEBlock",
     "ECABlock",
     "GAMAttention",
+    "LightSABlock",
 )
 from .simam import SimAM
 from .conv import EMA_attention
@@ -179,3 +180,4 @@ from .AFPN import Detect_AFPN4
 from .se import SEBlock
 from .eca import ECABlock
 from .gam import GAMAttention
+from .sa import LightSABlock
