@@ -57,7 +57,7 @@ from .block import (
     SCDown,
     TorchVision,
     SPPFCSPC,
-    A2C2f, AAttn,
+    A2C2f, AAttn, SPPCSPC,
 )
 from .conv import (
     CBAM,
@@ -172,6 +172,7 @@ __all__ = (
     "ECABlock",
     "GAMAttention",
     "LightSABlock",
+    "SPPCSPC"
 )
 from .simam import SimAM
 from .conv import EMA_attention
