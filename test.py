@@ -5,8 +5,8 @@ model = YOLO('runs/detect/train3/weights/best.pt')  # 每次训练完进行测�
 
 # 在测试集上进行评估
 metrics = model.val(
-    data='coco.yaml',  # 数据集配置文件路径
-    split='val',                   # 指定使用测试集
+    data='UAVDT.yaml',  # 数据集配置文件路径
+    split='test',                   # 指定使用测试集
 )
 
 # 输出评估指标
