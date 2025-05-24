@@ -4,7 +4,7 @@ from tqdm import tqdm  # 可视化进度条
 
 
 def clean_dataset(src_root, dst_root):
-    for split in ['train', 'val', 'test']:
+    for split in ['train', 'test']:
         # 定义路径
         img_src = os.path.join(src_root, 'images', split)
         label_src = os.path.join(src_root, 'labels', split)
@@ -36,6 +36,6 @@ def clean_dataset(src_root, dst_root):
 
 # 使用示例
 clean_dataset(
-    src_root="/path/to/raw_dataset",
-    dst_root="/path/to/cleaned_dataset"
+    src_root="/home/a10/ZH/ultralytics-main/datasets/UAVDT",
+    dst_root="/home/a10/ZH/ultralytics-main/datasets/UAVDT"
 )
