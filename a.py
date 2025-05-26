@@ -1,25 +1,19 @@
 import os
-import shutil
+from glob import glob
 
-src = '/home/a10/ZH/ultralytics-main/datasets/UAVDT'
-dst = '/home/a10/ZH/ultralytics-main/datasets/UAVDT_cleaned'
+# 图片和标签路径
+img_dir = "/home/a10/ZH/ultralytics-main/datasets/UAVDT/train/images"
+label_dir = "/home/a10/ZH/ultralytics-main/datasets/UAVDT/train/labels"
 
-for split in ['train', 'test']:  # UAVDT官方用test作val
-    # 处理images
-    os.makedirs(f'{dst}/images/{split}', exist_ok=True)
-    os.makedirs(f'{dst}/labels/{split}', exist_ok=True)
+# 获取所有图片和标签文件名（不带扩展名）
+img_files = [os.path.splitext(f)[0] for f in os.listdir(img_dir) if f.endswith('.jpg')]
+label_files = [os.path.splitext(f)[0] for f in os.listdir(label_dir) if f.endswith('.txt')]
 
-    # 构建有效图片列表
-    labels = {f.split('.')[0] for f in os.listdir(f'{src}/labels/{split}')}
+# 找出无标签的图片
+no_label_imgs = set(img_files) - set(label_files)
 
-    # 复制有效数据
-    for img in os.listdir(f'{src}/images/{split}'):
-        if img.split('.')[0] in labels:
-            shutil.copy(
-                src=f'{src}/images/{split}/{img}',
-                dst=f'{dst}/images/{split}/{img}'
-            )
-            shutil.copy(
-                src=f'{src}/labels/{split}/{img.replace(os.path.splitext(img)[1], ".txt")}',
-                dst=f'{dst}/labels/{split}/{img.replace(os.path.splitext(img)[1], ".txt")}'
-            )
+# 删除无标签的图片
+for img_name in no_label_imgs:
+    img_path = os.path.join(img_dir, img_name + '.jpg')
+    os.remove(img_path)
+    print(f"Deleted: {img_path}")
