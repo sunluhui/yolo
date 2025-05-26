@@ -7,7 +7,7 @@ model = YOLO(model='yolov8-ema.yaml', task='detect')
 model.train(
     data='DOTAv1.5.yaml',  # 数据集配置文件
     epochs=300,
-    imgsz=1024,
+    imgsz=640,
     batch=4,  # 可设置为更小的，占据更少的空间。
 )
 
