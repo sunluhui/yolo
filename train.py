@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 # 加载配置
-model = YOLO(model='yolov10n.yaml', task='detect')
+model = YOLO(model='yolov6.yaml', task='detect')
 
 # 训练参数
 model.train(
