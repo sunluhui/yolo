@@ -79,7 +79,7 @@ def xml_to_yolo_txt(xml_dir, output_dir, class_map):
 
 # 执行转换（指定输入输出路径）
 xml_to_yolo_txt(
-    xml_dir="home/a10/slh/yolo/datasets/UAVDT/train/annotations",
-    output_dir="home/a10/slh/yolo/datasets/UAVDT/train/labels",  # 根据划分结果调整路径
+    xml_dir="/home/a10/slh/yolo/datasets/UAVDT/train/annotations",
+    output_dir="/home/a10/slh/yolo/datasets/UAVDT/train/labels",  # 根据划分结果调整路径
     class_map=CLASS_MAP
 )
