@@ -437,10 +437,13 @@ class Detect_AFPN4(nn.Module):
         self.nl = 4  # 显式设置为4层输出
         self.reg_max = 16
         try:
-            self.no = int(nc) + int(self.reg_max) * 4
-        except TypeError:
-            raise ValueError(f"nc参数应为整数，当前值：{nc} (类型：{type(nc)})")
-        self.stride = torch.zeros(self.nl)
+            # 强制类型转换并增加容错处理
+            nc_val = int(nc) if isinstance(nc, (int, float)) else int(nc[0])
+            reg_max_val = int(self.reg_max)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"参数类型错误：nc={nc}，reg_max={self.reg_max}") from e
+
+        self.no = nc_val + reg_max_val * 4
 
         # 修复：检查 ch 是否为空
         if not ch:  # 如果 ch 为空
