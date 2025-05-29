@@ -425,31 +425,52 @@ class AFPN(nn.Module):
 
 # 定义一个检测模块，用于目标检测任务
 class Detect_AFPN4(nn.Module):
-    dynamic = False  # 是否动态调整
-    export = False  # 是否用于导出模型
-    shape = None  # 输入形状
-    anchors = torch.empty(0)  # 锚点
-    strides = torch.empty(0)  # 步长
+    dynamic = False
+    export = False
+    shape = None
+    anchors = torch.empty(0)
+    strides = torch.empty(0)
 
     def __init__(self, nc=80, channel=128, ch=()):
         super().__init__()
-        self.nc = nc  # 类别数
-        self.nl = len(ch)  # 检测层数
-        self.reg_max = 16  # 回归最大值
-        self.no = nc + self.reg_max * 4  # 每个锚点的输出数
-        self.stride = torch.zeros(self.nl)  # 步长
-        assert len(ch) >= 1, "Input channels tensor should have at least 1 dimension"
-        base_channels = ch[0] if len(ch) == 1 else ch[0][0]
+        self.nc = nc
+        self.nl = 4  # 显式设置为4层输出
+        self.reg_max = 16
+        self.no = nc + self.reg_max * 4
+        self.stride = torch.zeros(self.nl)
 
-        c2 = max((16, base_channels // 4, self.reg_max * 4))
-        c3 = max(base_channels, min(self.nc, 100))
-        self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(channel, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in
-            ch)  # 回归分支
-        self.cv3 = nn.ModuleList(
-            nn.Sequential(Conv(channel, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)  # 分类分支
-        self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()  # 分布焦点损失
-        self.AFPN = AFPN(ch)  # AFPN模块
+        # 修复：检查 ch 是否为空
+        if not ch:  # 如果 ch 为空
+            # 设置默认通道数（根据你的模型结构调整）
+            ch = [128, 256, 512, 1024]  # 对应 P2, P3, P4, P5
+
+        # 使用 ch[0] 或默认值
+        in_channels = ch[0] if ch else 128
+        c2 = max(16, in_channels // 4, self.reg_max * 4)
+        c3 = max(in_channels, min(self.nc, 100))
+
+        # 修复：为每个输出层创建独立的卷积模块
+        self.cv2 = nn.ModuleList()
+        self.cv3 = nn.ModuleList()
+
+        for i in range(self.nl):
+            self.cv2.append(
+                nn.Sequential(
+                    Conv(channel, c2, 3),
+                    Conv(c2, c2, 3),
+                    nn.Conv2d(c2, 4 * self.reg_max, 1)
+                )
+            )
+            self.cv3.append(
+                nn.Sequential(
+                    Conv(channel, c3, 3),
+                    Conv(c3, c3, 3),
+                    nn.Conv2d(c3, self.nc, 1)
+                )
+            )
+
+        self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
+        self.AFPN = AFPN(ch) if ch else AFPN([128, 256, 512, 1024])
 
     def forward(self, x):
         x = list(self.AFPN(x))  # 通过AFPN模块

@@ -1072,7 +1072,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        elif m in frozenset({Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn, Detect_AFPN4,v10Detect}):
+        elif m is Detect_AFPN4:
+            # 为 Detect_AFPN4 提供正确的通道数
+            args = [[ch[x] for x in f] if f else [128, 256, 512, 1024]] + args
+            m_ = m(*args)
+        elif m in frozenset({Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn,v10Detect}):
             args.append([ch[x] for x in f])
             if m is Segment:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
