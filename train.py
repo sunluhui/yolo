@@ -8,6 +8,6 @@ model.train(
     data='DOTAv1.5.yaml',  # 数据集配置文件
     epochs=200,
     imgsz=640,
-    batch=8,  # 可设置为更小的，占据更少的空间。
+    batch=6,  # 可设置为更小的，占据更少的空间。
 )
 
