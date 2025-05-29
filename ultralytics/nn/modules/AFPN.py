@@ -436,7 +436,7 @@ class Detect_AFPN4(nn.Module):
         self.nc = nc
         self.nl = 4  # 显式设置为4层输出
         self.reg_max = 16
-        self.no = nc + self.reg_max * 4
+        self.no = int(nc) + int(self.reg_max) * 4  # 强制类型转换
         self.stride = torch.zeros(self.nl)
 
         # 修复：检查 ch 是否为空
