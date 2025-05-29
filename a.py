@@ -1,16 +1,14 @@
-import os
-from collections import defaultdict
+import cv2
+import numpy as np
+from tqdm import tqdm
+from ultralytics import YOLO  # 或其他高性能检测器
 
-label_dir = '/home/a10/slh/yolo/datasets/UAVDT/train/labels'
-class_counts = defaultdict(int)
-class_names = set()
+# 初始化轻量级预训练模型 (YOLOv8n)
+model = YOLO('yolov8n.pt')
+background_frames = []
 
-for lbl_file in os.listdir(label_dir):
-    with open(os.path.join(label_dir, lbl_file)) as f:
-        for line in f:
-            class_id = int(line.strip().split()[0])
-            class_names.add(class_id)
-            class_counts[class_id] += 1
-
-print(f"类别总数: {len(class_names)}")
-print(f"类别分布: {dict(class_counts)}")
+for img_path in tqdm('/home/a10/slh/yolo/datasets/UAVDT'):
+    img = cv2.imread(img_path)
+    results = model(img, conf=0.25, verbose=False)  # 降低置信度避免漏检
+    if len(results[0].boxes) == 0:  # 无检测目标
+        background_frames.append(img_path)
