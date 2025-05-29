@@ -1,47 +1,31 @@
 import os
-import cv2
-import numpy as np
-from PIL import Image
-import matplotlib.pyplot as plt
 
+# 文件夹的路径
+folder_path = "/home/a10/slh/yolo/datasets/OpenDataLab___UAVDT/raw/UAV-benchmark-M/M0101"
+folder_path1 = os.path.join(folder_path, 'gt')  # 存放分割后的txt文件的路径
+folder_path2 = os.path.join(folder_path, 'img1')  # 照片的路径，主要用于统计有多少张照片，方便创建txt文件
+folder_path3 = os.path.join(folder_path, 'gt', 'M1102_gt_whole.txt')  # 存放标签的txt文件
 
-# 示例：检查标注文件与图像是否匹配（以YOLO格式为例）
-def plot_bboxes(image_path, label_path, class_names=None):
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    h, w = image.shape[:2]
+photo_count = 0
+# 判断图片数量
+for file_name in os.listdir(folder_path2):
+    # 使用os.path.splitext()函数获取文件扩展名
+    _, extension = os.path.splitext(file_name)
+    # 如果文件是照片文件（例如.jpg或.png），则增加计数器
+    if extension.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
+        photo_count += 1
+print("Total photos:", photo_count)
 
-    with open(label_path, 'r') as f:
-        lines = f.readlines()
+if not os.path.exists(folder_path):
+    os.makedirs(folder_path)
 
-    for line in lines:
-        parts = line.strip().split()
-        if len(parts) < 5:
-            continue  # 跳过空行或错误行
-        class_id, x_center, y_center, width, height = map(float, parts[:5])
-
-        # 转换为像素坐标
-        x1 = int((x_center - width / 2) * w)
-        y1 = int((y_center - height / 2) * h)
-        x2 = int((x_center + width / 2) * w)
-        y2 = int((y_center + height / 2) * h)
-
-        # 绘制边界框
-        cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        if class_names:
-            cv2.putText(image, class_names[int(class_id)], (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-    plt.imshow(image)
-    plt.axis('off')
-    plt.show()
-
-
-# 调用示例
-image_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/image00001.jpg"
-label_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/labels/image00001.txt"
-class_names = ["car", "truck", "bus"]  # 替换为你的类别名
-plot_bboxes(image_path, label_path, class_names)
-
-
+with open(folder_path3, 'r') as file:
+    lines = file.readlines()
+    for i in range(1, photo_count + 1):
+        file_path1 = os.path.join(folder_path1, str(i) + '.txt')
+        with open(file_path1, 'w') as target_file:
+            for line in lines:
+                data = line.split(',')
+                if data[0] == str(i):
+                    target_file.write(line)
 
