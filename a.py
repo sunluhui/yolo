@@ -93,7 +93,7 @@ def split_dataset(image_list, split_ratio=(0.8, 0.1, 0.1)):
 
 def main():
     # 配置参数
-    raw_data_dir = '/home/a10/slh/yolo/datasets/UAVDT'  # 原始数据路径
+    raw_data_dir = '/home/a10/slh/yolo/datasets/UAVDT/train/images'  # 原始数据路径
     voc_root = '/home/a10/slh/yolo/datasets/UAVDT_VOC'  # 输出VOC路径
     class_mapping = {0: 'car', 1: 'truck', 2: 'bus'}  # 类别映射表
 
