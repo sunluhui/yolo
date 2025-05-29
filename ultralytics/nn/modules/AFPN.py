@@ -205,7 +205,7 @@ class ASFF_4(nn.Module):
 
 # 定义一个包含多个尺度的特征融合模块
 class BlockBody(nn.Module):
-    def __init__(self, channels=[64, 128, 256, 512]):
+    def __init__(self, channels=[128, 256, 512, 1024]):
         super(BlockBody, self).__init__()
         # 定义多个尺度的卷积块
         self.blocks_scalezero1 = nn.Sequential(
@@ -371,7 +371,7 @@ class BlockBody(nn.Module):
 # 定义一个AFPN（Adaptive Feature Pyramid Network）模块
 class AFPN(nn.Module):
     def __init__(self,
-                 in_channels=[256, 512, 1024, 2048],
+                 in_channels=[128, 256, 512, 1024],
                  out_channels=128):
         super(AFPN, self).__init__()
         self.fp16_enabled = False  # 是否启用FP16

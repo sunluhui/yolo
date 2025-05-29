@@ -14,21 +14,58 @@ scales: # model compound scaling constants, i.e. 'model=yolov8n.yaml' will call 
   l: [1.00, 1.00, 512] # YOLOv8l summary: 365 layers, 43691520 parameters, 43691504 gradients, 165.7 GFLOPs
   x: [1.00, 1.25, 512] # YOLOv8x summary: 365 layers, 68229648 parameters, 68229632 gradients, 258.5 GFLOPs
 
+# Ultralytics YOLOv8 object detection model with P2/4 - P5/32 outputs for small objects
+# Task: Detection
+# Classes: 80 (COCO default)
+# Enhanced with AFPN and ASFF for small object detection
 
-# YOLOv8.0n backbone
+# YOLOv8n backbone with high-resolution output
 backbone:
-  # [from, repeats, module, args]
-  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2
-  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4
-  - [-1, 3, C2f, [128, True]]
-  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8
-  - [-1, 6, C2f, [256, True]]
-  - [-1, 1, Conv, [512, 3, 2]]  # 5-P4/16
-  - [-1, 6, C2f, [512, True]]
-  - [-1, 1, Conv, [1024, 3, 2]]  # 7-P5/32
-  - [-1, 3, C2f, [1024, True]]
-  - [-1, 1, SPPF, [1024, 5]]  # 9
+  - [-1, 1, Conv, [64, 3, 2]]   # 0-P1/2 [320x320]
+  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4 [160x160] ★高分辨率小目标层★
+  - [-1, 3, C2f, [128, True]]   # 2
+  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8 [80x80]
+  - [-1, 6, C2f, [256, True]]   # 4
+  - [-1, 1, Conv, [512, 3, 2]]  # 5-P4/16 [40x40]
+  - [-1, 6, C2f, [512, True]]   # 6
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32 [20x20]
+  - [-1, 3, C2f, [1024, True]]  # 8
+  - [-1, 1, SPPF, [1024, 5]]    # 9
 
-# YOLOv8.0n head
+# AFPN-enhanced head with small object optimization
 head:
-  - [[2, 4, 6, 9], 1, Detect_AFPN4, [nc, 128]]  # Detect(P3, P4, P5)
+  # ------------------- 特征金字塔构建 (自顶向下) -------------------
+  # P5分支处理 (20x20)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 10 上采样P5 (40x40)
+  - [[6, 10], 1, Concat, [1]]                   # 11 拼接P4和上采样P5
+  - [11, 1, C2f, [512]]                         # 12 融合特征 (40x40)
+
+  # P4分支处理 (40x40)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 13 上采样 (80x80)
+  - [[4, 13], 1, Concat, [1]]                   # 14 拼接P3和上采样特征
+  - [14, 1, C2f, [256]]                         # 15 融合特征 (80x80)
+
+  # P3分支处理 (80x80)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 16 上采样 (160x160)
+  - [[2, 16], 1, Concat, [1]]                   # 17 拼接P2和上采样特征
+  - [17, 1, C2f, [128]]                         # 18 小目标检测层★ (160x160)
+
+  # ------------------- 特征金字塔构建 (自底向上) -------------------
+  # P3/8分支 (80x80)
+  - [18, 1, Conv, [128, 3, 2]]   # 19 下采样 (80x80)
+  - [[15, 19], 1, Concat, [1]]    # 20 拼接
+  - [20, 1, C2f, [256]]           # 21 融合特征 (80x80)
+
+  # P4/16分支 (40x40)
+  - [21, 1, Conv, [256, 3, 2]]   # 22 下采样 (40x40)
+  - [[12, 22], 1, Concat, [1]]    # 23 拼接
+  - [23, 1, C2f, [512]]           # 24 融合特征 (40x40)
+
+  # P5/32分支 (20x20)
+  - [24, 1, Conv, [512, 3, 2]]   # 25 下采样 (20x20)
+  - [[9, 25], 1, Concat, [1]]     # 26 拼接原始P5
+  - [26, 1, C2f, [1024]]          # 27 融合特征 (20x20)
+
+  # ------------------- 四级检测输出 -------------------
+  # P2/4(160x160), P3/8(80x80), P4/16(40x40), P5/32(20x20)
+  - [[18, 21, 24, 27], 1, Detect_AFPN4, [nc]]  # 28 (检测层)
