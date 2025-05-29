@@ -8,7 +8,7 @@ import shutil
 from joblib import Parallel, delayed
 
 # ===== 配置参数 =====
-DATASET_PATH = "/home/a10/slh/yolo/datasets/UAVDT/train/images"  # UAVDT训练集路径
+DATASET_PATH = "/home/a10/slh/yolo/datasets/UAVDT/test/images"  # UAVDT训练集路径
 OUTPUT_PATH = "/home/a10/slh/yolo/datasets/UAVDT/cleaned_dataset"  # 清洗后输出路径
 TARGET_CLASSES = [0, 1, 2]  # 目标类别ID(车辆、卡车、巴士)
 MIN_CONFIDENCE = 0.25  # 检测置信度阈值
