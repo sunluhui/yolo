@@ -1,127 +1,76 @@
 import os
-import random
-import xml.etree.ElementTree as ET
-from tqdm import tqdm
+import json
 import cv2
-import shutil
+from glob import glob
 
 
-def create_voc_structure(root_dir):
-    """创建VOC标准目录结构"""
-    os.makedirs(os.path.join(root_dir, 'Annotations'), exist_ok=True)
-    os.makedirs(os.path.join(root_dir, 'JPEGImages'), exist_ok=True)
-    os.makedirs(os.path.join(root_dir, 'ImageSets/Main'), exist_ok=True)
+# 配置路径
+data_dir = '/home/a10/slh/yolo/datasets//OpenUAVLab_UAVDT/raw'
+output_dir = '//home/a10/slh/yolo/datasets/UAVDT_processed'
 
+# 创建输出目录
+os.makedirs(output_dir, exist_ok=True)
+os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
+os.makedirs(os.path.join(output_dir, 'annotations'), exist_ok=True)
 
-def convert_annotation(src_img_path, src_txt_path, dst_xml_path, class_mapping):
-    """单文件转换核心函数"""
-    # 读取图像信息
-    img = cv2.imread(src_img_path)
-    height, width, depth = img.shape
+# 示例：处理M_attr数据集
+image_dir = os.path.join(data_dir, 'M_attr/images')
+label_dir = os.path.join(data_dir, 'M_attr/labels')
 
-    # 创建XML根节点
-    annotation = ET.Element('annotation')
-    ET.SubElement(annotation, 'folder').text = 'JPEGImages'
-    ET.SubElement(annotation, 'filename').text = os.path.basename(src_img_path)
-    ET.SubElement(annotation, 'path').text = src_img_path
+# 创建COCO格式字典
+coco_data = {
+    "info": {"description": "UAVDT Dataset"},
+    "images": [],
+    "annotations": [],
+    "categories": [{
+        "id": 1,
+        "name": "uav",
+        "supercategory": "object"
+    }]
+}
 
-    # 添加图像尺寸信息
-    size = ET.SubElement(annotation, 'size')
-    ET.SubElement(size, 'width').text = str(width)
-    ET.SubElement(size, 'height').text = str(height)
-    ET.SubElement(size, 'depth').text = str(depth)
+# 遍历处理每个图像和标注
+image_id = 1
+annotation_id = 1
+for img_file in sorted(glob(os.path.join(image_dir, '*.jpg'))):
+    img_name = os.path.basename(img_file)
 
-    # 处理空白图片
-    if os.path.getsize(src_txt_path) == 0:
-        ET.SubElement(annotation, 'segmented').text = '0'
-        tree = ET.ElementTree(annotation)
-        tree.write(dst_xml_path)
-        return
+    # 处理图像信息
+    img_info = {
+        "id": image_id,
+        "file_name": img_name,
+        "width": cv2.imread(img_file).shape[1],
+        "height": cv2.imread(img_file).shape[0]
+    }
+    coco_data["images"].append(img_info)
 
-    # 解析原始标注
-    with open(src_txt_path, 'r') as f:
-        lines = f.readlines()
+    # 处理标注文件（假设与图片同名，扩展名为.txt）
+    label_file = os.path.join(label_dir, img_name.replace('.jpg', '.txt'))
+    with open(label_file, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            x_center, y_center, width, height, category_id = map(float, parts)
 
-    # 创建目标对象
-    for line in lines:
-        class_id, x_center, y_center, w, h = map(float, line.strip().split())
-        class_name = class_mapping[int(class_id)]
+            # 转换坐标到像素格式
+            x_min = (x_center - width / 2) * img_info["width"]
+            y_min = (y_center - height / 2) * img_info["height"]
+            x_max = (x_center + width / 2) * img_info["width"]
+            y_max = (y_center + height / 2) * img_info["height"]
 
-        # 计算边界框坐标
-        x_center *= width
-        y_center *= height
-        w *= width
-        h *= height
-        xmin = int(x_center - w / 2)
-        ymin = int(y_center - h / 2)
-        xmax = int(x_center + w / 2)
-        ymax = int(y_center + h / 2)
+            # 添加标注
+            annotation = {
+                "id": annotation_id,
+                "image_id": image_id,
+                "category_id": int(category_id),
+                "bbox": [x_min, y_min, x_max - x_min, y_max - y_min],
+                "area": (x_max - x_min) * (y_max - y_min),
+                "iscrowd": 0
+            }
+            coco_data["annotations"].append(annotation)
+            annotation_id += 1
 
-        # 创建object节点
-        obj = ET.SubElement(annotation, 'object')
-        ET.SubElement(obj, 'name').text = class_name
-        ET.SubElement(obj, 'pose').text = 'Unspecified'
-        ET.SubElement(obj, 'truncated').text = '0'
-        ET.SubElement(obj, 'difficult').text = '0'
-        bndbox = ET.SubElement(obj, 'bndbox')
-        ET.SubElement(bndbox, 'xmin').text = str(xmin)
-        ET.SubElement(bndbox, 'ymin').text = str(ymin)
-        ET.SubElement(bndbox, 'xmax').text = str(xmax)
-        ET.SubElement(bndbox, 'ymax').text = str(ymax)
+    image_id += 1
 
-    # 保存XML文件
-    tree = ET.ElementTree(annotation)
-    tree.write(dst_xml_path, encoding='utf-8', xml_declaration=True)
-
-
-def split_dataset(image_list, split_ratio=(0.8, 0.1, 0.1)):
-    """数据集划分"""
-    random.shuffle(image_list)
-    total = len(image_list)
-    train_end = int(total * split_ratio[0])
-    val_end = train_end + int(total * split_ratio[1])
-
-    with open('ImageSets/Main/train.txt', 'w') as f:
-        f.writelines([f"{img}\n" for img in image_list[:train_end]])
-
-    with open('ImageSets/Main/val.txt', 'w') as f:
-        f.writelines([f"{img}\n" for img in image_list[train_end:val_end]])
-
-    with open('ImageSets/Main/test.txt', 'w') as f:
-        f.writelines([f"{img}\n" for img in image_list[val_end:]])
-
-
-def main():
-    # 配置参数
-    raw_data_dir = '/home/a10/slh/yolo/datasets/UAVDT/train/images'  # 原始数据路径
-    voc_root = '/home/a10/slh/yolo/datasets/UAVDT_VOC'  # 输出VOC路径
-    class_mapping = {0: 'car', 1: 'truck', 2: 'bus'}  # 类别映射表
-
-    # 创建目录结构
-    create_voc_structure(voc_root)
-
-    # 文件列表
-    image_files = [f for f in os.listdir(raw_data_dir) if f.endswith('.jpg')]
-    txt_files = [f.replace('.jpg', '.txt') for f in image_files]
-
-    # 转换标注
-    for img_name, txt_name in tqdm(zip(image_files, txt_files)):
-        src_img = os.path.join(raw_data_dir, img_name)
-        src_txt = os.path.join(raw_data_dir, txt_name)
-        dst_xml = os.path.join(voc_root, 'Annotations', img_name.replace('.jpg', '.xml'))
-
-        # 执行转换
-        convert_annotation(src_img, src_txt, dst_xml, class_mapping)
-
-    # 复制图像文件
-    shutil.copytree(os.path.join(raw_data_dir, 'images'), os.path.join(voc_root, 'JPEGImages'))
-
-    # 划分数据集
-    with open(os.path.join(voc_root, 'ImageSets/Main/trainval.txt'), 'w') as f:
-        f.writelines([f"{img}\n" for img in image_files])
-
-    split_dataset(image_files)
-
-
-if __name__ == '__main__':
-    main()
+# 保存JSON文件
+with open(os.path.join(output_dir, 'annotations', 'instances_M_attr.json'), 'w') as f:
+    json.dump(coco_data, f)
