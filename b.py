@@ -3,7 +3,7 @@ import cv2
 from pathlib import Path
 
 # 设置数据集路径
-dataset_path = "/home/sh/yolo/datasets/OpenDataLab_UAVDT/raw/UAV-benchmark-M"
+dataset_path = "/home/a10/slh/yolo/datasets/OpenDataLab_UAVDT/raw/UAV-benchmark-M"
 output_path = os.path.join(dataset_path, "labels")
 
 # 创建输出目录(如果不存在)
