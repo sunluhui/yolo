@@ -38,8 +38,8 @@ def plot_bboxes(image_path, label_path, class_names=None):
 
 
 # 调用示例
-image_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/00001.jpg"
-label_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/labels/00001.txt"
+image_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/image00001.jpg"
+label_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/labels/image00001.txt"
 class_names = ["car", "truck", "bus"]  # 替换为你的类别名
 plot_bboxes(image_path, label_path, class_names)
 
