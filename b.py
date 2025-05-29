@@ -1,44 +1,63 @@
 import os
-import json
-from PIL import Image
+import cv2
+from pathlib import Path
 
+# 设置数据集路径
+dataset_path = "/home/sh/yolo/datasets/OpenDataLab_UAVDT/raw/UAV-benchmark-M"
+output_path = os.path.join(dataset_path, "labels")
 
-def json_to_detection_format(json_path, output_dir, img_dir, class_mapping):
-    # 加载JSON数据
-    with open(json_path, 'r') as f:
-        data = json.load(f)
+# 创建输出目录(如果不存在)
+os.makedirs(output_path, exist_ok=True)
 
-    # 创建输出目录
-    os.makedirs(output_dir, exist_ok=True)
+# 类别映射，根据UAV-benchmark-M的实际类别修改
+class_mapping = {
+    1: 0,  # 示例: 类别0映射到YOLO的类别0
+    2: 1,
+    3: 2   # 示例: 类别1映射到YOLO的类别1
+    # 添加更多类别...
+}
 
-    # 处理每个图像标注
-    for img_info in data['images']:
-        img_id = img_info['id']
-        img_path = os.path.join(img_dir, img_info['file_name'])
-        anns = [ann for ann in data['annotations'] if ann['image_id'] == img_id]
+# 遍历所有序列文件夹
+sequence_dirs = sorted([d for d in os.listdir(dataset_path) if d.startswith("M") and len(d) == 5])
+for seq_dir in sequence_dirs:
+    seq_path = os.path.join(dataset_path, seq_dir)
+    img_dir = os.path.join(seq_path, "images")  # 假设图像在images子文件夹中
 
-        # 创建YOLO格式标注文件
-        txt_path = os.path.join(output_dir, f"{img_id}.txt")
-        with open(txt_path, 'w') as f:
-            for ann in anns:
-                # 获取类别ID
-                cls_id = class_mapping[ann['category_id']]
+    # 获取所有图像文件
+    img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
 
-                # 坐标转换（YOLO格式）
-                x_center = (ann['bbox'][0] + ann['bbox'][2] / 2) / img_info['width']
-                y_center = (ann['bbox'][1] + ann['bbox'][3] / 2) / img_info['height']
-                width = ann['bbox'][2] / img_info['width']
-                height = ann['bbox'][3] / img_info['height']
+    for img_file in img_files:
+        img_path = os.path.join(img_dir, img_file)
+        img_name = os.path.splitext(img_file)[0]
 
-                # 写入文件
-                f.write(f"{cls_id} {x_center} {y_center} {width} {height}\n")
+        # 读取图像获取尺寸
+        img = cv2.imread(img_path)
+        h, w, _ = img.shape
 
+        # 获取对应的标签文件路径
+        label_file = os.path.join(seq_path, "labels", f"{img_name}.txt")  # 假设标签在labels子文件夹中
+        # 或者从其他格式的标注文件中读取(如VOC XML)
 
-# 使用示例
-class_mapping = {0: 0, 1: 1, 2: 2}  # 类别ID映射
-json_to_detection_format(
-    json_path='annotations.json',
-    output_dir='labels',
-    img_dir='images',
-    class_mapping=class_mapping
-)
+        # 创建YOLO格式的标签文件
+        yolo_label_path = os.path.join(output_path, f"{seq_dir}_{img_name}.txt")
+
+        with open(yolo_label_path, 'w') as f:
+            # 如果是直接读取YOLO格式的标签文件
+            if os.path.exists(label_file):
+                with open(label_file, 'r') as lf:
+                    lines = lf.readlines()
+                    for line in lines:
+                        class_id, x_center, y_center, bbox_width, bbox_height = line.strip().split()
+                        class_id = int(class_id)
+
+                        # 将坐标转换为相对于图像宽高的归一化值
+                        x_center = float(x_center)
+                        y_center = float(y_center)
+                        bbox_width = float(bbox_width)
+                        bbox_height = float(bbox_height)
+
+                        # 写入YOLO格式
+                        f.write(f"{class_id} {x_center} {y_center} {bbox_width} {bbox_height}\n")
+            else:
+                # 如果需要从其他格式转换，请在此处添加代码
+                pass
