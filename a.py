@@ -6,20 +6,42 @@ import matplotlib.pyplot as plt
 
 
 # 示例：检查标注文件与图像是否匹配（以YOLO格式为例）
-def check_data_consistency(data_dir, label_dir):
-    image_files = [f for f in os.listdir(data_dir) if f.endswith(('.jpg', '.png'))]
-    label_files = [f for f in os.listdir(label_dir) if f.endswith('.txt')]
+def plot_bboxes(image_path, label_path, class_names=None):
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    h, w = image.shape[:2]
 
-    # 检查图像和标注文件是否一一对应
-    for img_file in image_files:
-        label_file = img_file.replace('.jpg', '.txt').replace('.png', '.txt')
-        if label_file not in label_files:
-            print(f"Missing label for image: {img_file}")
+    with open(label_path, 'r') as f:
+        lines = f.readlines()
 
-    print(f"Total images: {len(image_files)}, Total labels: {len(label_files)}")
+    for line in lines:
+        parts = line.strip().split()
+        if len(parts) < 5:
+            continue  # 跳过空行或错误行
+        class_id, x_center, y_center, width, height = map(float, parts[:5])
+
+        # 转换为像素坐标
+        x1 = int((x_center - width / 2) * w)
+        y1 = int((y_center - height / 2) * h)
+        x2 = int((x_center + width / 2) * w)
+        y2 = int((y_center + height / 2) * h)
+
+        # 绘制边界框
+        cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        if class_names:
+            cv2.putText(image, class_names[int(class_id)], (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    plt.imshow(image)
+    plt.axis('off')
+    plt.show()
 
 
 # 调用示例
-data_dir = "/home/a10/slh/yolo/datasets/UAVDT/train/images"
-label_dir = "/home/a10/slh/yolo/datasets/UAVDT/train/labels"
-check_data_consistency(data_dir, label_dir)
+image_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/00001.jpg"
+label_path = "/home/a10/slh/yolo/datasets/UAVDT/train/images/labels/00001.txt"
+class_names = ["car", "person", "drone"]  # 替换为你的类别名
+plot_bboxes(image_path, label_path, class_names)
+
+
+
