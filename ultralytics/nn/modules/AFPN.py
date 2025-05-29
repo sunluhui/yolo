@@ -438,7 +438,11 @@ class Detect_AFPN4(nn.Module):
         self.reg_max = 16  # 回归最大值
         self.no = nc + self.reg_max * 4  # 每个锚点的输出数
         self.stride = torch.zeros(self.nl)  # 步长
-        c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # 通道数
+        assert len(ch) >= 1, "Input channels tensor should have at least 1 dimension"
+        base_channels = ch[0] if len(ch) == 1 else ch[0][0]
+
+        c2 = max((16, base_channels // 4, self.reg_max * 4))
+        c3 = max(base_channels, min(self.nc, 100))
         self.cv2 = nn.ModuleList(
             nn.Sequential(Conv(channel, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in
             ch)  # 回归分支
