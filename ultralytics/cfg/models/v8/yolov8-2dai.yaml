@@ -1,0 +1,70 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+# YOLOv8 object detection model with P2/4 - P5/32 outputs and BIFPN
+
+# Parameters
+nc: 80 # number of classes
+scales: # model compound scaling constants
+  # [depth, width, max_channels]
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.25, 512]
+
+# YOLOv8.0 backbone
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4
+  - [-1, 3, C2f, [128, True]]   # 2
+  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8
+  - [-1, 6, C2f, [256, True]]   # 4
+  - [-1, 1, Conv, [512, 3, 2]]  # 5-P4/16
+  - [-1, 6, C2f, [512, True]]   # 6
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
+  - [-1, 3, C2f, [1024, True]]  # 8
+  - [-1, 1, SPPF, [1024, 5]]    # 9
+
+# YOLOv8.0-p2 head with BIFPN
+head:
+  # ----- BIFPN 特征输入层 -----
+  # 调整各层级特征图通道数
+  - [1, 1, Conv, [128, 1, 1]]  # 10: P2/4 (128)
+  - [3, 1, Conv, [256, 1, 1]]  # 11: P3/8 (256)
+  - [5, 1, Conv, [512, 1, 1]]  # 12: P4/16 (512)
+  - [9, 1, Conv, [1024, 1, 1]] # 13: P5/32 (1024)
+
+  # ----- 自顶向下路径 (Top-down) -----
+  # P5 -> P4
+  - [[13], 1, nn.Upsample, [None, 2, "nearest"]]  # 14
+  - [[12, 14], 1, Concat, [1]]  # 15
+  - [15, 1, C2f, [512]]        # 16 (P4_merged)
+
+  # P4 -> P3
+  - [[16], 1, nn.Upsample, [None, 2, "nearest"]]  # 17
+  - [[11, 17], 1, Concat, [1]]  # 18
+  - [18, 1, C2f, [256]]         # 19 (P3_merged)
+
+  # P3 -> P2
+  - [[19], 1, nn.Upsample, [None, 2, "nearest"]]  # 20
+  - [[10, 20], 1, Concat, [1]]  # 21
+  - [21, 1, C2f, [128]]         # 22 (P2_out)
+
+  # ----- 自底向上路径 (Bottom-up) -----
+  # P2 -> P3
+  - [[22], 1, Conv, [128, 3, 2]]  # 23
+  - [[19, 23], 1, Concat, [1]]    # 24
+  - [24, 1, C2f, [256]]           # 25 (P3_out)
+
+  # P3 -> P4
+  - [[25], 1, Conv, [256, 3, 2]]  # 26
+  - [[16, 26], 1, Concat, [1]]    # 27
+  - [27, 1, C2f, [512]]           # 28 (P4_out)
+
+  # P4 -> P5
+  - [[28], 1, Conv, [512, 3, 2]]  # 29
+  - [[13, 29], 1, Concat, [1]]    # 30
+  - [30, 1, C2f, [1024]]          # 31 (P5_out)
+
+  # ----- 检测头 -----
+  - [[22, 25, 28, 31], 1, Detect, [nc]]  # Detect(P2, P3, P4, P5)
