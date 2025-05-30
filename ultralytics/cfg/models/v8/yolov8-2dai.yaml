@@ -26,32 +26,33 @@ backbone:
   - [-1, 1, SPPF, [1024, 5]]    # 9
 
 # YOLOv8.0-p2 head with BIFPN
+# YOLOv8.0-p2 head with BIFPN
 head:
-  # Feature input layers
-  - [1, 1, Conv, [256, 1, 1]]  # 10: P2 -> 256
-  - [3, 1, Conv, [256, 1, 1]]  # 11: P3 -> 256
-  - [5, 1, Conv, [256, 1, 1]]  # 12: P4 -> 256
-  - [9, 1, Conv, [256, 1, 1]]  # 13: P5 -> 256
+  # ===== 统一特征通道 =====
+  - [1, 1, Conv, [256, 1, 1]]  # 10: P2/4 -> 256
+  - [3, 1, Conv, [256, 1, 1]]  # 11: P3/8 -> 256
+  - [5, 1, Conv, [256, 1, 1]]  # 12: P4/16 -> 256
+  - [9, 1, Conv, [256, 1, 1]]  # 13: P5/32 -> 256
 
-  # Top-down path
+  # ===== 自顶向下路径 =====
   - [13, 1, nn.Upsample, [None, 2, "nearest"]]  # 14
-  - [12, 14, 1, BiFPN_Concat2, [256, 2]]          # 15
+  - [[12, 14], 1, BiFPN_Concat2, [256, 2]]        # 15
 
   - [15, 1, nn.Upsample, [None, 2, "nearest"]]  # 16
-  - [11, 16, 1, BiFPN_Concat2k, [256, 2]]          # 17
+  - [[11, 16], 1, BiFPN_Concat2, [256, 2]]        # 17
 
   - [17, 1, nn.Upsample, [None, 2, "nearest"]]  # 18
-  - [10, 18, 1, BiFPN_Concat2, [256, 2]]          # 19
+  - [[10, 18], 1, BiFPN_Concat2, [256, 2]]        # 19
 
-  # Bottom-up path
-  - [19, 1, Conv, [256, 3, 2]]  # 20
-  - [17, 20, 1, BiFPN_Concat2, [256, 2]]          # 21
+  # ===== 自底向上路径 =====
+  - [19, 1, Conv, [256, 3, 2]]        # 20
+  - [[17, 20], 1, BiFPN_Concat2, [256, 2]]        # 21
 
-  - [21, 1, Conv, [256, 3, 2]]  # 22
-  - [15, 22, 1, BiFPN_Concat2, [256, 2]]          # 23
+  - [21, 1, Conv, [256, 3, 2]]        # 22
+  - [[15, 22], 1, BiFPN_Concat2, [256, 2]]        # 23
 
-  - [23, 1, Conv, [256, 3, 2]]  # 24
-  - [13, 24, 1, BiFPN_Concat2, [256, 2]]          # 25
+  - [23, 1, Conv, [256, 3, 2]]        # 24
+  - [[13, 24], 1, BiFPN_Concat2, [256, 2]]        # 25
 
-  # Detect head
-  - [19, 21, 23, 25, 1, Detect, [nc]]  # Output layers
+  # ===== 检测头 =====
+  - [[18, 21, 24, 27], 1, Detect, [nc]]  # Detect(P2, P3, P4, P5)
