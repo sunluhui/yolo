@@ -33,19 +33,20 @@ class BiFPN_Concat2(nn.Module):
         Returns:
             (torch.Tensor): 融合并转换后的特征图
         """
+        # 确保输入数量与预期一致
+        if len(x) != self.num_inputs:
+            raise ValueError(
+                f"BiFPN_Block expected {self.num_inputs} inputs, but got {len(x)}. "
+                "Check layer connections in YAML configuration."
+            )
+
         # 确保所有输入特征图通道数一致
-        if not all(x[i].size(1) == x[0].size(1) for i in range(1, self.num_inputs)):
-            # 自动对齐通道数
-            target_channels = x[0].size(1)
-            aligned = [x[0]]
-            for i in range(1, self.num_inputs):
-                if x[i].size(1) != target_channels:
-                    # 使用1x1卷积对齐通道
-                    align_conv = Conv(x[i].size(1), target_channels, k=1).to(x[i].device)
-                    aligned.append(align_conv(x[i]))
-                else:
-                    aligned.append(x[i])
-            x = aligned
+        first_channel = x[0].size(1)
+        for i in range(1, self.num_inputs):
+            if x[i].size(1) != first_channel:
+                # 自动对齐通道数
+                align_conv = Conv(x[i].size(1), first_channel, k=1).to(x[i].device)
+                x[i] = align_conv(x[i])
 
         # 计算归一化权重
         weights = F.relu(self.w)
@@ -56,5 +57,3 @@ class BiFPN_Concat2(nn.Module):
 
         # 特征转换
         return self.conv(fused)
-
-
