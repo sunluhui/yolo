@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from ultralytics.nn.modules import Conv
 
 
-class BiFPN_Block(nn.Module):
+class BiFPN_Concat2(nn.Module):
     """Simplified BiFPN Block"""
 
     def __init__(self, c2, num_inputs=2, eps=1e-4):
