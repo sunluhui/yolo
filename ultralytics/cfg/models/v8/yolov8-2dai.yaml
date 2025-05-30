@@ -27,37 +27,31 @@ backbone:
 
 # YOLOv8.0-p2 head with BIFPN
 head:
-  # ----- BIFPN 特征输入层 -----
-  - [1, 1, Conv, [128, 1, 1]]  # 10: P2/4 (128)
-  - [3, 1, Conv, [256, 1, 1]]  # 11: P3/8 (256)
-  - [5, 1, Conv, [512, 1, 1]]  # 12: P4/16 (512)
-  - [9, 1, Conv, [1024, 1, 1]] # 13: P5/32 (1024)
+  # Feature input layers
+  - [1, 1, Conv, [256, 1, 1]]  # 10: P2 -> 256
+  - [3, 1, Conv, [256, 1, 1]]  # 11: P3 -> 256
+  - [5, 1, Conv, [256, 1, 1]]  # 12: P4 -> 256
+  - [9, 1, Conv, [256, 1, 1]]  # 13: P5 -> 256
 
-  # ----- 自顶向下路径 (Top-down) -----
-  # P5 -> P4
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 14
-  - [[12, 14], 1, BiFPN_Concat2, [512, 2]]  # 15 (替换Concat)
+  # Top-down path
+  - [13, 1, nn.Upsample, [None, 2, "nearest"]]  # 14
+  - [12, 14, 1, BiFPN_Concat2, [256, 2]]          # 15
 
-  # P4 -> P3
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 16
-  - [[11, 16], 1, BiFPN_Concat2, [256, 2]]  # 17 (替换Concat)
+  - [15, 1, nn.Upsample, [None, 2, "nearest"]]  # 16
+  - [11, 16, 1, BiFPN_Concat2k, [256, 2]]          # 17
 
-  # P3 -> P2
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 18
-  - [[10, 18], 1, BiFPN_Concat2, [128, 2]]  # 19 (替换Concat)
+  - [17, 1, nn.Upsample, [None, 2, "nearest"]]  # 18
+  - [10, 18, 1, BiFPN_Concat2, [256, 2]]          # 19
 
-  # ----- 自底向上路径 (Bottom-up) -----
-  # P2 -> P3
-  - [-1, 1, Conv, [128, 3, 2]]  # 20
-  - [[17, 20], 1, BiFPN_Concat2, [256, 2]]  # 21 (替换Concat)
+  # Bottom-up path
+  - [19, 1, Conv, [256, 3, 2]]  # 20
+  - [17, 20, 1, BiFPN_Concat2, [256, 2]]          # 21
 
-  # P3 -> P4
-  - [-1, 1, Conv, [256, 3, 2]]  # 22
-  - [[15, 22], 1, BiFPN_Concat2, [512, 2]]  # 23 (替换Concat)
+  - [21, 1, Conv, [256, 3, 2]]  # 22
+  - [15, 22, 1, BiFPN_Concat2, [256, 2]]          # 23
 
-  # P4 -> P5
-  - [-1, 1, Conv, [512, 3, 2]]  # 24
-  - [[13, 24], 1, BiFPN_Concat2, [1024, 2]]  # 25 (替换Concat)
+  - [23, 1, Conv, [256, 3, 2]]  # 24
+  - [13, 24, 1, BiFPN_Concat2, [256, 2]]          # 25
 
-  # ----- 检测头 -----
-  - [[19, 21, 23, 25], 1, Detect, [nc]]  # Detect(P2, P3, P4, P5)
+  # Detect head
+  - [19, 21, 23, 25, 1, Detect, [nc]]  # Output layers
