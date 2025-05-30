@@ -36,28 +36,28 @@ head:
 
   # ----- 自顶向下路径 (Top-down) -----
   # P5 -> P4
-  - [[13], 1, nn.Upsample, [None, 2, "nearest"]]  # 14
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 14
   - [[12, 14], 1, BiFPN_Concat2, [512, 2]]  # 15 (P4融合输出)
 
   # P4 -> P3
-  - [[15], 1, nn.Upsample, [None, 2, "nearest"]]  # 16
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 16
   - [[11, 16], 1, BiFPN_Concat2, [256, 2]]  # 17 (P3融合输出)
 
   # P3 -> P2
-  - [[17], 1, nn.Upsample, [None, 2, "nearest"]]  # 18
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 18
   - [[10, 18], 1, BiFPN_Concat2, [128, 2]]  # 19 (P2输出)
 
   # ----- 自底向上路径 (Bottom-up) -----
   # P2 -> P3
-  - [[19], 1, Conv, [128, 3, 2]]  # 20
+  - [-1, 1, Conv, [128, 3, 2]]  # 20
   - [[17, 20], 1, BiFPN_Concat2, [256, 2]]  # 21 (P3输出)
 
   # P3 -> P4
-  - [[21], 1, Conv, [256, 3, 2]]  # 22
+  - [-1, 1, Conv, [256, 3, 2]]  # 22
   - [[15, 22], 1, BiFPN_Concat2, [512, 2]]  # 23 (P4输出)
 
   # P4 -> P5
-  - [[23], 1, Conv, [512, 3, 2]]  # 24
+  - [-1, 1, Conv, [512, 3, 2]]  # 24
   - [[13, 24], 1, BiFPN_Concat2, [1024, 2]]  # 25 (P5输出)
 
   # ----- 检测头 -----
