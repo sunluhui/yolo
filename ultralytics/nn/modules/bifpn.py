@@ -5,9 +5,12 @@ from ultralytics.nn.modules import Conv
 
 
 class BiFPN_Concat2(nn.Module):
-    """BiFPN Block with channel alignment"""
-
-    def __init__(self, c1, c2, num_inputs=2, eps=1e-4):
+    def __init__(self, c_list, c2, num_inputs=2, eps=1e-4):
+        """
+        c_list: 输入特征图的通道数列表
+        c2: 输出通道数
+        num_inputs: 输入特征图数量
+        """
         super().__init__()
         self.eps = eps
         self.num_inputs = num_inputs
@@ -15,8 +18,9 @@ class BiFPN_Concat2(nn.Module):
 
         # 为每个输入创建独立的通道对齐卷积
         self.align_convs = nn.ModuleList()
-        for _ in range(num_inputs):
-            self.align_convs.append(Conv(c1, c2, k=1, s=1, act=False))
+        for c_in in c_list:
+            # 每个输入有自己的对齐卷积
+            self.align_convs.append(Conv(c_in, c2, k=1, s=1, act=False))
 
         # 可学习权重
         self.w = nn.Parameter(torch.ones(num_inputs, dtype=torch.float32), requires_grad=True)
@@ -39,6 +43,7 @@ class BiFPN_Concat2(nn.Module):
 
         # 特征转换
         return self.conv(fused)
+
 
 
 
