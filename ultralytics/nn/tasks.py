@@ -64,7 +64,7 @@ from ultralytics.nn.modules import (
     v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock,SPPCSPC,
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
-from ultralytics.nn.modules.bifpn import  BiFPN_Concat2, BiFPN_Concat3
+from ultralytics.nn.modules.bifpn import  BiFPN_Concat2
 from ultralytics.nn.modules.block import CoordAtt
 from ultralytics.nn.modules.biformer import BiFormerBlock
 from ultralytics.nn.modules.block import SPPFCSPC
@@ -1094,7 +1094,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
-        elif m in {Concat, BiFPN_Concat2,BiFPN_Concat3}:
+        elif m in {Concat, BiFPN_Concat2}:
             c2 = sum(ch[x] for x in f)
         elif m in {EMA_attention}:
             args = [ch[f], *args]
