@@ -61,7 +61,9 @@ from ultralytics.nn.modules import (
     Segment,
     TorchVision,
     WorldDetect,
-    v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock,SPPCSPC,
+    v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock, SPPCSPC,
+    MultiBranchAttention, ChannelAttention, SpatialAttention,
+    LocalContextAttention, GlobalContextAttention
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import BiFPN_Concat2
@@ -1076,7 +1078,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             # 为 Detect_AFPN4 提供正确的通道数
             args = [[ch[x] for x in f] if f else [128, 256, 512, 1024]] + args
             m_ = m(*args)
-        elif m in frozenset({Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn,v10Detect}):
+        elif m in frozenset({Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn, v10Detect}):
             args.append([ch[x] for x in f])
             if m is Segment:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
@@ -1096,6 +1098,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [*args[1:]]
         elif m in {Concat, BiFPN_Concat2}:
             c2 = sum(ch[x] for x in f)
+        elif m in {MultiBranchAttention, ChannelAttention, SpatialAttention,
+                   LocalContextAttention, GlobalContextAttention}:
+            c1 = ch[f]
+            c2 = args[0]
+            args = [c1, *args[1:]]
         elif m in {EMA_attention}:
             args = [ch[f], *args]
         else:
@@ -1198,7 +1205,7 @@ def guess_model_task(model):
                 return "pose"
             elif isinstance(m, OBB):
                 return "obb"
-            elif isinstance(m, (Detect, WorldDetect, Detect_AFPN4,v10Detect)):
+            elif isinstance(m, (Detect, WorldDetect, Detect_AFPN4, v10Detect)):
                 return "detect"
 
     # Guess from model filename

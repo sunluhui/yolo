@@ -16,6 +16,7 @@ Example:
     os.system(f"onnxslim {f} {f} && open {f}")  # pip install onnxslim
     ```
 """
+
 from .block import (
     C1,
     C2,
@@ -172,7 +173,9 @@ __all__ = (
     "ECABlock",
     "GAMAttention",
     "LightSABlock",
-    "SPPCSPC"
+    "SPPCSPC",
+    "LocalContextAttention",
+    "GlobalContextAttention"
 )
 from .simam import SimAM
 from .conv import EMA_attention
@@ -182,3 +185,4 @@ from .se import SEBlock
 from .eca import ECABlock
 from .gam import GAMAttention
 from .sa import LightSABlock
+from .MultiBranchAttention import GlobalContextAttention, LocalContextAttention
