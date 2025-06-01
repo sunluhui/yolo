@@ -186,4 +186,4 @@ from .se import SEBlock
 from .eca import ECABlock
 from .gam import GAMAttention
 from .sa import LightSABlock
-from .MultiBranchAttention import GlobalContextAttention, LocalContextAttention
+from .MultiBranchAttention import GlobalContextAttention, LocalContextAttention,MultiBranchAttention
