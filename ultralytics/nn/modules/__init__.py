@@ -175,7 +175,8 @@ __all__ = (
     "LightSABlock",
     "SPPCSPC",
     "LocalContextAttention",
-    "GlobalContextAttention"
+    "GlobalContextAttention",
+    "MultiBranchAttention"
 )
 from .simam import SimAM
 from .conv import EMA_attention
