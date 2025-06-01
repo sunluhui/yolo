@@ -62,8 +62,7 @@ from ultralytics.nn.modules import (
     TorchVision,
     WorldDetect,
     v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock, SPPCSPC,
-    MultiBranchAttention, ChannelAttention, SpatialAttention,
-    LocalContextAttention, GlobalContextAttention
+    MultiBranchAttention, ChannelAttention, SpatialAttention,LocalContextAttention, GlobalContextAttention
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import BiFPN_Concat2
