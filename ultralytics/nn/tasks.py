@@ -62,7 +62,7 @@ from ultralytics.nn.modules import (
     TorchVision,
     WorldDetect,
     v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock, SPPCSPC,
-    MultiBranchAttention, ChannelAttention, SpatialAttention,LocalContextAttention, GlobalContextAttention
+    MultiBranchAttention, ChannelAttention, SpatialAttention, LocalContextAttention, GlobalContextAttention, MS_CAM
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import BiFPN_Concat2
@@ -993,6 +993,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             GAMAttention,
             LightSABlock,
             SPPCSPC,
+            MS_CAM,
+            MultiBranchAttention,
+            ChannelAttention,
+            SpatialAttention,
+            LocalContextAttention,
+            GlobalContextAttention
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1097,11 +1103,6 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [*args[1:]]
         elif m in {Concat, BiFPN_Concat2}:
             c2 = sum(ch[x] for x in f)
-        elif m in {MultiBranchAttention, ChannelAttention, SpatialAttention,
-                   LocalContextAttention, GlobalContextAttention}:
-            c1 = ch[f]
-            c2 = args[0]
-            args = [c1, *args[1:]]
         elif m in {EMA_attention}:
             args = [ch[f], *args]
         else:

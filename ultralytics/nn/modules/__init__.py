@@ -176,8 +176,10 @@ __all__ = (
     "SPPCSPC",
     "LocalContextAttention",
     "GlobalContextAttention",
-    "MultiBranchAttention"
+    "MultiBranchAttention",
+    "MS_CAM"
 )
+from .ms_cam import MS_CAM
 from .simam import SimAM
 from .conv import EMA_attention
 from .dwr import DWR  # 新增导入
