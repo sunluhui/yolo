@@ -177,8 +177,10 @@ __all__ = (
     "LocalContextAttention",
     "GlobalContextAttention",
     "MultiBranchAttention",
-    "MS_CAM"
+    "MS_CAM",
+    "ELA"
 )
+from .ela import ELA
 from .ms_cam import MS_CAM
 from .simam import SimAM
 from .conv import EMA_attention
