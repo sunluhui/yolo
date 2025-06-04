@@ -165,6 +165,94 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class FFTEnhancer(nn.Module):
+    """频域特征增强模块"""
+
+    def __init__(self, channels, reduction=16):
+        super().__init__()
+        self.channels = channels
+        self.reduction = reduction
+
+        # 可学习高频增强滤波器
+        self.filter = nn.Sequential(
+            nn.Linear(channels, channels // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channels // reduction, channels, bias=False),
+            nn.Sigmoid()
+        )
+
+        # 自适应增强系数
+        self.alpha = nn.Parameter(torch.tensor(0.5))
+
+    def forward(self, x):
+        _, C, H, W = x.shape
+
+        # FFT变换到频域
+        x_fft = torch.fft.rfft2(x, norm='ortho')
+
+        # 分离幅度谱和相位谱
+        magnitude = torch.abs(x_fft)
+        phase = torch.angle(x_fft)
+
+        # 高频增强 - 可学习滤波器
+        magnitude_flat = magnitude.permute(0, 2, 3, 1).reshape(-1, C)
+        enhanced = self.filter(magnitude_flat)
+        enhanced = enhanced.view(-1, H, W // 2 + 1, C).permute(0, 3, 1, 2)
+
+        # 混合增强谱和原始谱
+        mixed_magnitude = (1 - self.alpha) * magnitude + self.alpha * enhanced * magnitude
+
+        # 重建复数频域信号
+        enhanced_fft = torch.polar(mixed_magnitude, phase)
+
+        # IFFT变换回空间域
+        enhanced_x = torch.fft.irfft2(enhanced_fft, s=(H, W), norm='ortho')
+
+        return enhanced_x
+
+
+class FFT_SPPF(nn.Module):
+    """改进的频域增强SPPF模块"""
+
+    def __init__(self, c1, c2, k=5, bins=100):
+        super().__init__()
+        # 频域增强模块
+        self.fft_enhancer = FFTEnhancer(c1)
+
+        # 原始SPPF结构
+        c_ = c1 // 2
+        self.cv1 = nn.Sequential(
+            nn.Conv2d(c1, c_, 1, 1),
+            nn.BatchNorm2d(c_),
+            nn.SiLU()
+        )
+        self.cv2 = nn.Sequential(
+            nn.Conv2d(c_ * 4, c2, 1, 1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+        self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+        # 残差连接
+        self.shortcut = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
+
+    def forward(self, x):
+        # 频域增强
+        enhanced = self.fft_enhancer(x)
+
+        # 原始SPPF处理流
+        x = self.cv1(enhanced)
+        y1 = self.m(x)
+        y2 = self.m(y1)
+        y3 = self.m(y2)
+
+        # 特征拼接
+        sppf_out = self.cv2(torch.cat([x, y1, y2, y3], dim=1))
+
+        # 残差连接
+        return sppf_out + self.shortcut(x)
+
+
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
