@@ -165,6 +165,169 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class CoordAtt(nn.Module):
+    """坐标注意力机制 (Coordinate Attention)"""
+
+    def __init__(self, in_channels, reduction=16):
+        super().__init__()
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        mid_channels = max(8, in_channels // reduction)
+
+        self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=1, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm2d(mid_channels)
+        self.act = nn.Hardswish(inplace=True)
+
+        self.conv_h = nn.Conv2d(mid_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.conv_w = nn.Conv2d(mid_channels, in_channels, kernel_size=1, stride=1, padding=0)
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        identity = x
+
+        # 高度方向的注意力
+        h = self.pool_h(x)
+        h = self.conv1(h)
+        h = self.bn1(h)
+        h = self.act(h)
+        h = self.conv_h(h)
+        h_att = self.sigmoid(h)
+
+        # 宽度方向的注意力
+        w = self.pool_w(x)
+        w = self.conv1(w)
+        w = self.bn1(w)
+        w = self.act(w)
+        w = self.conv_w(w)
+        w_att = self.sigmoid(w)
+
+        # 融合空间注意力
+        att = h_att * w_att
+
+        # 应用注意力权重
+        return identity * att
+
+
+class RFAtt(nn.Module):
+    """感受野注意力机制 (Receptive Field Attention)"""
+
+    def __init__(self, in_channels, kernels=[3, 5, 7], reduction=16):
+        super().__init__()
+        self.branches = nn.ModuleList()
+        for k in kernels:
+            padding = k // 2
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, kernel_size=k, padding=padding, groups=in_channels),
+                    nn.BatchNorm2d(in_channels),
+                    nn.ReLU(inplace=True)
+                ))
+
+            self.avg_pool = nn.AdaptiveAvgPool2d(1)
+            self.fc = nn.Sequential(
+                nn.Linear(in_channels * len(kernels), in_channels // reduction),
+                nn.ReLU(inplace=True),
+                nn.Linear(in_channels // reduction, in_channels * len(kernels)),
+                nn.Sigmoid()
+            )
+
+    def forward(self, x):
+        batch_size, _, H, W = x.shape
+        outputs = []
+
+        # 并行多分支卷积
+        for branch in self.branches:
+            outputs.append(branch(x))
+
+        # 拼接多尺度特征
+        u = torch.cat(outputs, dim=1)
+
+        # 通道注意力
+        s = self.avg_pool(u).view(batch_size, -1)
+        z = self.fc(s).view(batch_size, -1, 1, 1)
+
+        # 特征加权融合
+        att_map = u * z
+
+        # 分割加权后的特征
+        split_att = torch.split(att_map, x.size(1), dim=1)
+
+        # 特征融合
+        out = sum(split_att) / len(split_att)
+        return out
+
+
+class CA_RFA_SPPF(nn.Module):
+    """集成CA和RFA的改进SPPF模块"""
+
+    def __init__(self, c1, c2, k=5, bins=100):
+        super().__init__()
+        # 通道调整
+        c_ = c1 // 2  # 减少通道数
+
+        # 输入卷积
+        self.cv1 = nn.Sequential(
+            nn.Conv2d(c1, c_, 1, 1),
+            nn.BatchNorm2d(c_),
+            nn.SiLU()
+        )
+
+        # 池化分支
+        self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+        # 坐标注意力模块 (每个分支后)
+        self.ca1 = CoordAtt(c_)
+        self.ca2 = CoordAtt(c_)
+        self.ca3 = CoordAtt(c_)
+
+        # 输出卷积
+        self.cv2 = nn.Sequential(
+            nn.Conv2d(c_ * 4, c2, 1, 1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+        # 感受野注意力模块 (拼接后)
+        self.rfa = RFAtt(c2, kernels=[3, 5, 7])
+
+        # 残差连接
+        self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
+
+        # 自适应参数
+        self.alpha = nn.Parameter(torch.tensor(0.7))  # 注意力融合系数
+
+    def forward(self, x):
+        # 原始输入保留
+        identity = self.residual(x)
+
+        # 第一阶段：通道减少
+        x = self.cv1(x)
+
+        # 多尺度池化分支
+        y0 = x  # 原始特征
+        y1 = self.m(x)  # 第一层池化
+        y2 = self.m(y1)  # 第二层池化
+        y3 = self.m(y2)  # 第三层池化
+
+        # 在池化分支后应用坐标注意力
+        y1 = self.ca1(y1)
+        y2 = self.ca2(y2)
+        y3 = self.ca3(y3)
+
+        # 特征拼接
+        x = torch.cat([y0, y1, y2, y3], dim=1)
+
+        # 输出卷积
+        x = self.cv2(x)
+
+        # 应用感受野注意力
+        x = self.rfa(x)
+
+        # 残差连接 + 自适应融合
+        return identity + self.alpha * x
+
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 

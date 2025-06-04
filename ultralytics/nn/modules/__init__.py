@@ -58,7 +58,7 @@ from .block import (
     SCDown,
     TorchVision,
     SPPFCSPC,
-    A2C2f, AAttn, SPPCSPC,
+    A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF
 )
 from .conv import (
     CBAM,
@@ -179,6 +179,7 @@ __all__ = (
     "MultiBranchAttention",
     "MS_CAM",
     "ELA",
+    "CA_RFA_SPPF",
 )
 from .ela import ELA
 from .ms_cam import MS_CAM
