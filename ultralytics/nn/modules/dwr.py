@@ -1,63 +1,53 @@
 import torch
 import torch.nn as nn
-import math
-
-
-class ECAAttention(nn.Module):
-    def __init__(self, channels, gamma=2, b=1):
-        super().__init__()
-        t = int(abs((math.log(channels, 2) + b) / gamma))
-        kernel_size = t if t % 2 else t + 1
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, bias=False)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        y = self.avg_pool(x)
-        y = self.conv(y.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)
-        return x * self.sigmoid(y)
 
 
 class DWR(nn.Module):
-    def __init__(self, c1, c2, dilation_rates=[1, 2, 3], reduction=16):
+    """Dense With Residual模块"""
+
+    def __init__(self, in_channels, growth_rate=32, num_layers=3):
         super().__init__()
-        if isinstance(dilation_rates, int):
-            dilation_rates = [dilation_rates]
+        self.layers = nn.ModuleList()
+        current_channels = in_channels
 
-        self.convs = nn.ModuleList()
-        for rate in dilation_rates:
-            self.convs.append(
-                nn.Sequential(
-                    # 深度可分离卷积
-                    nn.Conv2d(c1, c1, 3, padding=rate, dilation=rate, groups=c1, bias=False),
-                    nn.Conv2d(c1, c2, 1, bias=False),
-                    nn.BatchNorm2d(c2),
-                    nn.SiLU()
-                )
+        # 构建密集连接层
+        for _ in range(num_layers):
+            layer = nn.Sequential(
+                nn.Conv2d(current_channels, growth_rate, 3, padding=1, bias=False),
+                nn.BatchNorm2d(growth_rate),
+                nn.SiLU(inplace=True)
             )
+            self.layers.append(layer)
+            current_channels += growth_rate
 
-        # 改进的特征融合
+        # 残差路径的1x1卷积
+        self.res_conv = nn.Sequential(
+            nn.Conv2d(in_channels, current_channels, 1, bias=False),
+            nn.BatchNorm2d(current_channels)
+        )
+
+        # 最终融合卷积
         self.fusion = nn.Sequential(
-            nn.Conv2d(c2 * len(dilation_rates), c2 * 2, 1),
-            nn.GELU(),
-            nn.Conv2d(c2 * 2, c2, 1)
+            nn.Conv2d(current_channels * 2, in_channels, 1, bias=False),
+            nn.BatchNorm2d(in_channels),
+            nn.SiLU()
         )
-
-        # 双重注意力机制
-        self.channel_attention = ECAAttention(c2)
-        self.spatial_attention = nn.Sequential(
-            nn.Conv2d(c2, 1, 7, padding=3, bias=False),
-            nn.Sigmoid()
-        )
-
-        self.shortcut = nn.Conv2d(c1, c2, 1) if c1 != c2 else nn.Identity()
 
     def forward(self, x):
-        features = [conv(x) for conv in self.convs]
-        fused = self.fusion(torch.cat(features, dim=1))
+        identity = x
+        features = [x]
 
-        # 注意力机制应用
-        channel_att = self.channel_attention(fused)
-        spatial_att = self.spatial_attention(fused)
+        # 密集连接前向传播
+        for layer in self.layers:
+            new_feat = layer(torch.cat(features, dim=1))
+            features.append(new_feat)
 
-        return self.shortcut(x) + fused * channel_att * spatial_att
+        # 特征拼接
+        dense_out = torch.cat(features[1:], dim=1)
+
+        # 残差路径
+        res_out = self.res_conv(identity)
+
+        # 融合并返回
+        fused = self.fusion(torch.cat([dense_out, res_out], dim=1))
+        return fused + identity  # 残差连接

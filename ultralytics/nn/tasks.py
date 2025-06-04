@@ -90,6 +90,7 @@ from ultralytics.utils.torch_utils import (
     scale_img,
     time_sync,
 )
+from .modules.dynamic_snake_conv import DynamicSnakeConv
 
 
 class BaseModel(torch.nn.Module):
@@ -986,7 +987,6 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             SCDown,
             C2fCIB,
             SPPFCSPC,
-            DWR,
             A2C2f,
             SEBlock,
             ECABlock,
@@ -1000,6 +1000,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             LocalContextAttention,
             GlobalContextAttention,
             ELA,
+            DynamicSnakeConv,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1018,7 +1019,6 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2fPSA,
             C2fCIB,
             C2PSA,
-            DWR,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1098,6 +1098,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [c1, c2, *args[1:]]
         elif m is CBFuse:
             c2 = ch[f[-1]]
+        elif m is DWR:
+            args = [ch[f], *args]  # 自动注入输入通道数
         elif m in frozenset({TorchVision, Index}):
             c2 = args[0]
             c1 = ch[f]
