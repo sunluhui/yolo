@@ -212,45 +212,44 @@ class FFTEnhancer(nn.Module):
 
 
 class FFT_SPPF(nn.Module):
-    """改进的频域增强SPPF模块"""
-
     def __init__(self, c1, c2, k=5, bins=100):
         super().__init__()
-        # 频域增强模块
+        # 频域增强模块（保持通道数c1）
         self.fft_enhancer = FFTEnhancer(c1)
 
-        # 原始SPPF结构
-        c_ = c1 // 2
+        # SPPF结构
+        c_ = c1 // 2  # 中间层通道数
         self.cv1 = nn.Sequential(
             nn.Conv2d(c1, c_, 1, 1),
             nn.BatchNorm2d(c_),
             nn.SiLU()
         )
         self.cv2 = nn.Sequential(
-            nn.Conv2d(c_ * 4, c2, 1, 1),
+            nn.Conv2d(c_ * 4, c2, 1, 1),  # 最终输出通道c2
             nn.BatchNorm2d(c2),
             nn.SiLU()
         )
         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
 
-        # 残差连接
+        # 关键修改：残差路径直接处理原始增强特征
         self.shortcut = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
 
     def forward(self, x):
-        # 频域增强
-        enhanced = self.fft_enhancer(x)
+        # 频域增强 → 保存用于残差连接
+        enhanced = self.fft_enhancer(x)  # 通道数保持c1
+        identity = enhanced  # 作为残差路径输入
 
-        # 原始SPPF处理流
-        x = self.cv1(enhanced)
+        # SPPF处理流
+        x = self.cv1(enhanced)  # 降维到c_=c1//2
         y1 = self.m(x)
         y2 = self.m(y1)
         y3 = self.m(y2)
 
-        # 特征拼接
+        # 特征拼接 → 输出通道c2
         sppf_out = self.cv2(torch.cat([x, y1, y2, y3], dim=1))
 
-        # 残差连接
-        return sppf_out + self.shortcut(x)
+        # 残差连接：使用原始增强特征（非降维后特征）
+        return sppf_out + self.shortcut(identity)  # 确保通道对齐
 
 
 class SPPF(nn.Module):
