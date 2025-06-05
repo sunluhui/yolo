@@ -385,12 +385,12 @@ class DynamicConv2d(nn.Module):
         )  # (B, out, in//groups, kH, kW)
 
         # 重塑为分组卷积格式
-        combined_weight = combined_weight.view(
-            B * self.out_channels,
-            self.in_channels // self.groups,
-            self.kernel_size,
-            self.kernel_size
+        target_shape = (
+            self.cv2[0].out_channels,
+            self.cv2[0].in_channels // self.cv2[0].groups,  # 考虑分组卷积
+            1, 1
         )
+        combined_weight = combined_weight.view(target_shape)
 
         # 处理偏置
         if self.bias is not None:
