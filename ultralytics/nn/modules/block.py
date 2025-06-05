@@ -209,73 +209,6 @@ class MultiModalFusion(nn.Module):
         return v_weight * vis_out + i_weight * ir_out
 
 
-class FreqEnhancedCoordAtt(nn.Module):
-    """融合频域信息的增强坐标注意力"""
-
-    def __init__(self, in_channels, reduction=16):
-        super().__init__()
-        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
-        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
-
-        mid_channels = max(8, in_channels // reduction)
-
-        # 频域处理分支 - 修改为处理复数张量
-        self.fft_conv = nn.Sequential(
-            nn.Conv2d(2, 8, 3, padding=1),  # 输入通道改为2（实部和虚部）
-            nn.ReLU(),
-            nn.Conv2d(8, 2, 3, padding=1)  # 输出通道改为2
-        )
-
-        # 空间处理分支
-        self.spatial_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, 1),
-            nn.BatchNorm2d(mid_channels),
-            nn.SiLU(),
-            nn.Conv2d(mid_channels, in_channels, 1)
-        )
-
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        # 频域分析 - 使用rfft2处理实数输入
-        fft_feat = torch.fft.rfft2(x, norm='ortho')
-
-        # 分离实部和虚部
-        fft_real = fft_feat.real
-        fft_imag = fft_feat.imag
-
-        # 拼接实部和虚部作为通道维度
-        fft_combined = torch.cat([fft_real.unsqueeze(1), fft_imag.unsqueeze(1)], dim=1)
-
-        # 增强频域特征
-        fft_enhanced = self.fft_conv(fft_combined)
-
-        # 分离增强后的实部和虚部
-        fft_real_enhanced = fft_enhanced[:, 0, :, :]
-        fft_imag_enhanced = fft_enhanced[:, 1, :, :]
-
-        # 重建复数信号
-        fft_enhanced_complex = torch.complex(fft_real_enhanced, fft_imag_enhanced)
-
-        # 逆变换回空间域
-        fft_enhanced_spatial = torch.fft.irfft2(fft_enhanced_complex, s=x.shape[-2:], norm='ortho')
-
-        # 空间注意力
-        h = self.pool_h(x)
-        w = self.pool_w(x)
-        spatial_feat = torch.cat([h, w], dim=2)
-        spatial_att = self.spatial_conv(spatial_feat)
-
-        # 组合注意力
-        freq_att = self.sigmoid(fft_enhanced_spatial)
-        spatial_att = self.sigmoid(spatial_att)
-
-        # 双域融合
-        combined_att = freq_att * spatial_att
-
-        return x * combined_att + x
-
-
 class DynamicRFAtt(nn.Module):
     """自适应选择最佳感受野的注意力机制"""
 
@@ -392,10 +325,10 @@ class AdvancedCA_RFA_EnhancedSPPF(nn.Module):
         self.pool3 = nn.MaxPool2d(kernel_size=7, stride=1, padding=3)
 
         # 频域增强坐标注意力
-        self.ca0 = FreqEnhancedCoordAtt(c_)
-        self.ca1 = FreqEnhancedCoordAtt(c_)
-        self.ca2 = FreqEnhancedCoordAtt(c_)
-        self.ca3 = FreqEnhancedCoordAtt(c_)
+        self.ca0 = EnhancedCoordAtt(c_)
+        self.ca1 = EnhancedCoordAtt(c_)
+        self.ca2 = EnhancedCoordAtt(c_)
+        self.ca3 = EnhancedCoordAtt(c_)
 
         # 输出卷积
         self.cv2 = nn.Sequential(
