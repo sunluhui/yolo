@@ -426,34 +426,38 @@ class AdaptivePooling(nn.Module):
     def forward(self, x):
         B, C, H, W = x.shape
 
-        # 动态选择池化类型
-        pool_weights = self.selector(x).view(B, 2)
-        max_weight, avg_weight = pool_weights[:, 0], pool_weights[:, 1]
+        # 生成注意力权重 (B, K, 1, 1)
+        attn_weights = self.attention(x).view(B, self.K, 1, 1)  # 确保是4维张量
 
-        # 动态选择卷积核大小
-        kernel_size = self.min_kernel + (self.max_kernel - self.min_kernel) * max_weight.mean()
-        kernel_size = int(kernel_size.round().clamp(self.min_kernel, self.max_kernel))
-
-        # 动态填充
-        padding = kernel_size // 2
-
-        # 最大池化
-        max_pool = F.max_pool2d(
-            x, kernel_size=kernel_size, stride=1, padding=padding
+        # 修复einsum维度匹配问题
+        combined_weight = torch.einsum(
+            'bki... , oihw -> bokihw...',  # 修正后的方程
+            attn_weights,
+            self.weight
         )
 
-        # 平均池化
-        avg_pool = F.avg_pool2d(
-            x, kernel_size=kernel_size, stride=1, padding=padding
+        # 动态调整权重形状
+        out_channels = self.cv2[0].out_channels
+        groups = self.cv2[0].groups
+
+        # 验证形状兼容性
+        assert combined_weight.dim() == 4, "combined_weight 必须是4维张量"
+        assert combined_weight.shape[1] == out_channels, "通道维度不匹配"
+        assert combined_weight.shape[2] == C // groups, "输入通道分组错误"
+
+        # 分组卷积实现
+        x = x.view(1, B * C, H, W)  # 合并批量维度
+        output = F.conv2d(
+            x,
+            weight=combined_weight.view(B * out_channels, C // groups, *self.kernel_size),
+            bias=self.bias,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=B * groups
         )
 
-        # 融合池化结果
-        combined_pool = max_weight.view(B, 1, 1, 1) * max_pool + avg_weight.view(B, 1, 1, 1) * avg_pool
-
-        # 卷积池化增强
-        conv_pool = self.conv_pool(x)
-
-        return 0.5 * combined_pool + 0.5 * conv_pool
+        return output.view(B, out_channels, output.size(2), output.size(3))
 
 
 class DynamicSPPF(nn.Module):
