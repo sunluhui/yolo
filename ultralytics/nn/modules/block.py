@@ -219,11 +219,11 @@ class FreqEnhancedCoordAtt(nn.Module):
 
         mid_channels = max(8, in_channels // reduction)
 
-        # 频域处理分支
+        # 频域处理分支 - 修改为处理复数张量
         self.fft_conv = nn.Sequential(
-            nn.Conv2d(1, 8, 3, padding=1),
+            nn.Conv2d(2, 8, 3, padding=1),  # 输入通道改为2（实部和虚部）
             nn.ReLU(),
-            nn.Conv2d(8, 1, 3, padding=1)
+            nn.Conv2d(8, 2, 3, padding=1)  # 输出通道改为2
         )
 
         # 空间处理分支
@@ -237,18 +237,28 @@ class FreqEnhancedCoordAtt(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        # 频域分析
+        # 频域分析 - 使用rfft2处理实数输入
         fft_feat = torch.fft.rfft2(x, norm='ortho')
-        fft_mag = torch.abs(fft_feat)
-        fft_phase = torch.angle(fft_feat)
 
-        # 增强高频分量
-        fft_mag_enhanced = self.fft_conv(fft_mag.unsqueeze(1)).squeeze(1)
-        fft_enhanced = torch.fft.irfft2(
-            fft_mag_enhanced * torch.exp(1j * fft_phase),
-            s=x.shape[-2:],
-            norm='ortho'
-        )
+        # 分离实部和虚部
+        fft_real = fft_feat.real
+        fft_imag = fft_feat.imag
+
+        # 拼接实部和虚部作为通道维度
+        fft_combined = torch.cat([fft_real.unsqueeze(1), fft_imag.unsqueeze(1)], dim=1)
+
+        # 增强频域特征
+        fft_enhanced = self.fft_conv(fft_combined)
+
+        # 分离增强后的实部和虚部
+        fft_real_enhanced = fft_enhanced[:, 0, :, :]
+        fft_imag_enhanced = fft_enhanced[:, 1, :, :]
+
+        # 重建复数信号
+        fft_enhanced_complex = torch.complex(fft_real_enhanced, fft_imag_enhanced)
+
+        # 逆变换回空间域
+        fft_enhanced_spatial = torch.fft.irfft2(fft_enhanced_complex, s=x.shape[-2:], norm='ortho')
 
         # 空间注意力
         h = self.pool_h(x)
@@ -256,11 +266,11 @@ class FreqEnhancedCoordAtt(nn.Module):
         spatial_feat = torch.cat([h, w], dim=2)
         spatial_att = self.spatial_conv(spatial_feat)
 
-        # 双域融合
-        freq_att = self.sigmoid(fft_enhanced)
+        # 组合注意力
+        freq_att = self.sigmoid(fft_enhanced_spatial)
         spatial_att = self.sigmoid(spatial_att)
 
-        # 组合注意力
+        # 双域融合
         combined_att = freq_att * spatial_att
 
         return x * combined_att + x
