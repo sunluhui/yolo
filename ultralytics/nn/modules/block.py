@@ -284,6 +284,12 @@ class EnhancedRFAtt(nn.Module):
         for branch in self.branches:
             outputs.append(branch(x))
 
+        # 确保所有分支输出尺寸一致（修复尺寸不匹配问题）
+        target_size = outputs[0].shape[2:]  # 以第一个分支的输出尺寸为目标
+        for i in range(1, len(outputs)):
+            if outputs[i].shape[2:] != target_size:
+                outputs[i] = F.interpolate(outputs[i], size=target_size, mode='bilinear', align_corners=False)
+
         # 拼接多尺度特征
         u = torch.cat(outputs, dim=1)
 
@@ -307,9 +313,17 @@ class EnhancedRFAtt(nn.Module):
         # 分割加权后的特征
         split_att = torch.split(u_att, C, dim=1)
 
-        # 特征融合 - 使用自适应权重
+        # 特征融合 - 使用自适应权重（修复尺寸不匹配问题）
         weights = F.softmax(spatial_att.mean(dim=[3, 4]).squeeze(2), dim=1)  # [B, num_branches]
-        out = sum(w * f for w, f in zip(weights.split(1, dim=1), split_att))
+        out = torch.zeros_like(outputs[0])  # 初始化为与分支输出相同尺寸的张量
+
+        # 确保每个特征图尺寸一致
+        for i, f in enumerate(split_att):
+            if f.shape[2:] != target_size:
+                f = F.interpolate(f, size=target_size, mode='bilinear', align_corners=False)
+            # 使用正确的权重维度
+            w = weights[:, i].view(batch_size, 1, 1, 1)  # [B, 1, 1, 1]
+            out += w * f
 
         return out
 
@@ -388,6 +402,12 @@ class CA_RFA_EnhancedSPPF(nn.Module):
         y2 = self.ca2(self.pool2(x))  # 第二层池化 + CA
         y3 = self.ca3(self.pool3(x))  # 第三层池化 + CA
 
+        # 确保所有特征图尺寸一致
+        target_size = y0.shape[2:]
+        y1 = self._resize_if_needed(y1, target_size)
+        y2 = self._resize_if_needed(y2, target_size)
+        y3 = self._resize_if_needed(y3, target_size)
+
         # 特征拼接
         x = torch.cat([y0, y1, y2, y3], dim=1)
 
@@ -402,6 +422,12 @@ class CA_RFA_EnhancedSPPF(nn.Module):
 
         # 残差连接 + 自适应融合
         return self.beta * identity + self.alpha * x
+
+    def _resize_if_needed(self, tensor, target_size):
+        """如果需要，调整张量尺寸到目标尺寸"""
+        if tensor.shape[2:] != target_size:
+            return F.interpolate(tensor, size=target_size, mode='bilinear', align_corners=False)
+        return tensor
 
 
 class CoordAtt(nn.Module):
