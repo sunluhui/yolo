@@ -378,45 +378,29 @@ class DynamicConv2d(nn.Module):
         # 生成注意力权重 (B, K, 1, 1)
         attn_weights = self.attention(x).view(B, self.K, 1, 1)
 
-        # 加权融合卷积核
-        combined_weight = torch.sum(
-            attn_weights[:, :, None, None, None, None] * self.weight[None],
-            dim=1
-        )  # (B, out, in//groups, kH, kW)
+        # 加权融合卷积核 (关键修复部分)
+        combined_weight = torch.einsum('bki,oihw->bokihw', attn_weights, self.weight)
 
-        # 重塑为分组卷积格式 - 修复错误
-        combined_weight = combined_weight.view(
-            B * self.out_channels,
-            self.in_channels // self.groups,
-            self.kernel_size,
-            self.kernel_size
-        )
-
-        # 处理偏置
-        if self.bias is not None:
-            # 计算加权偏置
-            combined_bias = torch.sum(attn_weights.view(B, self.K) * self.bias, dim=1)  # (B, out_channels)
-            combined_bias = combined_bias.view(B * self.out_channels)
-        else:
-            combined_bias = None
+        # 分组卷积参数校验
+        out_channels = self.cv2[0].out_channels
+        groups = self.cv2[0].groups
+        assert combined_weight.shape[1] == out_channels, "通道维度不匹配"
+        assert combined_weight.shape[2] == C // groups, "输入通道分组错误"
 
         # 分组卷积实现
         x = x.view(1, B * C, H, W)  # 合并批量维度
         output = F.conv2d(
             x,
-            weight=combined_weight,
-            bias=combined_bias,
+            weight=combined_weight.view(B * out_channels, C // groups, *self.kernel_size),
+            bias=self.bias,
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
-            groups=B * self.groups
+            groups=B * groups  # 修正分组参数
         )
 
         # 恢复输出形状
-        output = output.view(B, self.out_channels, output.size(2), output.size(3))
-
-        return output
-
+        return output.view(B, out_channels, output.size(2), output.size(3))
 
 class AdaptivePooling(nn.Module):
     """自适应池化层 - 动态调整感受野 - 修复版本"""
