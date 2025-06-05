@@ -284,7 +284,7 @@ class EnhancedRFAtt(nn.Module):
         for branch in self.branches:
             outputs.append(branch(x))
 
-        # 确保所有分支输出尺寸一致（修复尺寸不匹配问题）
+        # 确保所有分支输出尺寸一致
         target_size = outputs[0].shape[2:]  # 以第一个分支的输出尺寸为目标
         for i in range(1, len(outputs)):
             if outputs[i].shape[2:] != target_size:
@@ -313,16 +313,33 @@ class EnhancedRFAtt(nn.Module):
         # 分割加权后的特征
         split_att = torch.split(u_att, C, dim=1)
 
-        # 特征融合 - 使用自适应权重（修复尺寸不匹配问题）
-        weights = F.softmax(spatial_att.mean(dim=[3, 4]).squeeze(2), dim=1)  # [B, num_branches]
+        # 特征融合 - 使用自适应权重（修复索引越界问题）
+        # 计算分支权重（确保正确处理单分支情况）
+        spatial_att_mean = spatial_att.mean(dim=[3, 4])  # [B, 1, 1]
+        spatial_att_mean = spatial_att_mean.squeeze(2)  # [B, 1]
+
+        # 检查分支数量
+        num_branches = len(self.branches)
+        if num_branches > 1:
+            weights = F.softmax(spatial_att_mean, dim=1)  # [B, num_branches]
+        else:
+            # 当只有一个分支时，权重固定为1
+            weights = torch.ones(batch_size, 1, device=x.device)
+
         out = torch.zeros_like(outputs[0])  # 初始化为与分支输出相同尺寸的张量
 
         # 确保每个特征图尺寸一致
-        for i, f in enumerate(split_att):
+        for i in range(num_branches):
+            f = split_att[i]
             if f.shape[2:] != target_size:
                 f = F.interpolate(f, size=target_size, mode='bilinear', align_corners=False)
-            # 使用正确的权重维度
-            w = weights[:, i].view(batch_size, 1, 1, 1)  # [B, 1, 1, 1]
+
+            # 使用正确的权重维度（处理单分支情况）
+            if num_branches > 1:
+                w = weights[:, i].view(batch_size, 1, 1, 1)  # [B, 1, 1, 1]
+            else:
+                w = weights.view(batch_size, 1, 1, 1)  # [B, 1, 1, 1]
+
             out += w * f
 
         return out
