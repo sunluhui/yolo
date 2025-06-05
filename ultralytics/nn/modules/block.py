@@ -167,6 +167,243 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class EnhancedCoordAtt(nn.Module):
+    """增强版坐标注意力机制 - 改进小目标特征提取"""
+
+    def __init__(self, in_channels, reduction=16):
+        super().__init__()
+        # 使用分组卷积减少参数
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        mid_channels = max(8, in_channels // reduction)
+
+        # 添加深度可分离卷积增强特征提取
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, groups=in_channels),
+            nn.Conv2d(in_channels, mid_channels, kernel_size=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.Hardswish(inplace=True)
+        )
+
+        # 使用不同卷积核增强特征
+        self.conv_h = nn.Sequential(
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.Conv2d(mid_channels, in_channels, kernel_size=1)
+        )
+        self.conv_w = nn.Sequential(
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.Conv2d(mid_channels, in_channels, kernel_size=1)
+        )
+
+        # 添加通道注意力作为补充
+        self.channel_att = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_channels, in_channels // reduction, 1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels // reduction, in_channels, 1),
+            nn.Sigmoid()
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        identity = x
+
+        # 高度方向注意力
+        h = self.pool_h(x)
+        h = self.conv1(h)
+        h = self.conv_h(h)
+        h_att = self.sigmoid(h)
+
+        # 宽度方向注意力
+        w = self.pool_w(x)
+        w = self.conv1(w)
+        w = self.conv_w(w)
+        w_att = self.sigmoid(w)
+
+        # 通道注意力
+        c_att = self.channel_att(x)
+
+        # 融合空间和通道注意力
+        att = h_att * w_att * c_att
+
+        # 应用注意力权重
+        return identity * att + x  # 残差连接
+
+
+class EnhancedRFAtt(nn.Module):
+    """增强版感受野注意力机制 - 优化小目标特征融合"""
+
+    def __init__(self, in_channels, kernels=[1, 3, 5], reduction=16):
+        super().__init__()
+        self.branches = nn.ModuleList()
+
+        # 添加1x1卷积分支保留细节信息
+        self.branches.append(
+            nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, kernel_size=1),
+                nn.BatchNorm2d(in_channels),
+                nn.ReLU(inplace=True)
+            ))
+
+        # 添加不同感受野的分支
+        for k in kernels:
+            if k > 1:  # 1x1已添加
+                padding = k // 2
+                self.branches.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, in_channels, kernel_size=k, padding=padding, groups=in_channels),
+                        nn.BatchNorm2d(in_channels),
+                        nn.ReLU(inplace=True)
+                    ))
+
+        # 改进的注意力机制
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        # 双通道注意力
+        self.fc = nn.Sequential(
+            nn.Linear(in_channels * len(self.branches) * 2, in_channels // reduction),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_channels // reduction, in_channels * len(self.branches)),
+            nn.Sigmoid()
+        )
+
+        # 空间注意力
+        self.spatial_att = nn.Sequential(
+            nn.Conv2d(len(self.branches), 1, kernel_size=7, padding=3),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        batch_size, C, H, W = x.shape
+        outputs = []
+
+        # 并行多分支卷积
+        for branch in self.branches:
+            outputs.append(branch(x))
+
+        # 拼接多尺度特征
+        u = torch.cat(outputs, dim=1)
+
+        # 通道注意力
+        avg_out = self.avg_pool(u).view(batch_size, -1)
+        max_out = self.max_pool(u).view(batch_size, -1)
+        channel_out = torch.cat([avg_out, max_out], dim=1)
+        channel_att = self.fc(channel_out).view(batch_size, -1, 1, 1)
+
+        # 空间注意力
+        spatial_in = torch.stack(outputs, dim=1)  # [B, num_branches, C, H, W]
+        spatial_in = spatial_in.mean(dim=2)  # [B, num_branches, H, W]
+        spatial_att = self.spatial_att(spatial_in).unsqueeze(2)  # [B, 1, 1, H, W]
+
+        # 特征加权融合
+        u_att = u * channel_att
+        u_att = u_att.view(batch_size, len(self.branches), C, H, W)
+        u_att = u_att * spatial_att
+        u_att = u_att.view(batch_size, -1, H, W)
+
+        # 分割加权后的特征
+        split_att = torch.split(u_att, C, dim=1)
+
+        # 特征融合 - 使用自适应权重
+        weights = F.softmax(spatial_att.mean(dim=[3, 4]).squeeze(2), dim=1)  # [B, num_branches]
+        out = sum(w * f for w, f in zip(weights.split(1, dim=1), split_att))
+
+        return out
+
+
+class CA_RFA_EnhancedSPPF(nn.Module):
+    """增强版SPPF模块 - 专为小目标检测优化"""
+
+    def __init__(self, c1, c2, k=5, bins=100):
+        super().__init__()
+        # 保留更多细节信息
+        c_ = c1 * 2 // 3  # 减少通道压缩
+
+        # 输入卷积 - 使用深度可分离卷积保留细节
+        self.cv1 = nn.Sequential(
+            nn.Conv2d(c1, c1, kernel_size=3, padding=1, groups=c1),  # 深度卷积
+            nn.Conv2d(c1, c_, kernel_size=1),  # 点卷积
+            nn.BatchNorm2d(c_),
+            nn.SiLU()
+        )
+
+        # 多尺度池化分支 - 使用不同大小的池化核
+        self.pool1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+        self.pool2 = nn.MaxPool2d(kernel_size=5, stride=1, padding=2)
+        self.pool3 = nn.MaxPool2d(kernel_size=7, stride=1, padding=3)
+
+        # 坐标注意力模块 (每个分支后) - 使用增强版
+        self.ca0 = EnhancedCoordAtt(c_)  # 原始特征
+        self.ca1 = EnhancedCoordAtt(c_)  # 第一层池化
+        self.ca2 = EnhancedCoordAtt(c_)  # 第二层池化
+        self.ca3 = EnhancedCoordAtt(c_)  # 第三层池化
+
+        # 输出卷积 - 使用残差连接
+        self.cv2 = nn.Sequential(
+            nn.Conv2d(c_ * 4, c2, 1, 1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+        # 感受野注意力模块 - 使用增强版
+        self.rfa = EnhancedRFAtt(c2, kernels=[1, 3, 5])
+
+        # 残差连接 - 使用卷积保留更多信息
+        self.residual = nn.Sequential(
+            nn.Conv2d(c1, c1, 3, padding=1, groups=c1),  # 深度卷积
+            nn.Conv2d(c1, c2, 1),  # 点卷积
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        ) if c1 != c2 else nn.Identity()
+
+        # 自适应参数 - 使用多个参数
+        self.alpha = nn.Parameter(torch.tensor(0.7))  # 注意力融合系数
+        self.beta = nn.Parameter(torch.tensor(0.3))  # 残差融合系数
+
+        # 小目标增强模块 - 高分辨率特征保留
+        self.detail_enhance = nn.Sequential(
+            nn.Conv2d(c1, c2 // 4, 3, padding=1),
+            nn.BatchNorm2d(c2 // 4),
+            nn.SiLU(),
+            nn.Conv2d(c2 // 4, c2, 1),
+            nn.Sigmoid()  # 生成注意力图
+        )
+
+    def forward(self, x):
+        # 原始输入保留
+        identity = self.residual(x)
+
+        # 提取小目标细节特征
+        detail_att = self.detail_enhance(x)
+
+        # 第一阶段：通道调整
+        x = self.cv1(x)
+
+        # 多尺度池化分支
+        y0 = self.ca0(x)  # 原始特征 + CA
+        y1 = self.ca1(self.pool1(x))  # 第一层池化 + CA
+        y2 = self.ca2(self.pool2(x))  # 第二层池化 + CA
+        y3 = self.ca3(self.pool3(x))  # 第三层池化 + CA
+
+        # 特征拼接
+        x = torch.cat([y0, y1, y2, y3], dim=1)
+
+        # 输出卷积
+        x = self.cv2(x)
+
+        # 应用感受野注意力
+        x = self.rfa(x)
+
+        # 应用小目标细节增强
+        x = x * (1 + detail_att)  # 增强小目标特征
+
+        # 残差连接 + 自适应融合
+        return self.beta * identity + self.alpha * x
+
+
 class CoordAtt(nn.Module):
     """坐标注意力机制 (Coordinate Attention)"""
 

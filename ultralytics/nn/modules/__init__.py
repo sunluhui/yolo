@@ -58,7 +58,7 @@ from .block import (
     SCDown,
     TorchVision,
     SPPFCSPC,
-    A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF, DynamicSPPF
+    A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF
 )
 from .conv import (
     CBAM,
@@ -181,6 +181,7 @@ __all__ = (
     "ELA",
     "CA_RFA_SPPF",
     "DynamicSPPF",
+    "CA_RFA_EnhancedSPPF",
 )
 from .ela import ELA
 from .ms_cam import MS_CAM
