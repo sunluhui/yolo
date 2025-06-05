@@ -332,7 +332,7 @@ class CA_RFA_SPPF(nn.Module):
 
 
 class DynamicConv2d(nn.Module):
-    """CVPR 2024 动态卷积实现"""
+    """CVPR 2024 动态卷积实现 - 修复版本"""
 
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1,
                  dilation=1, groups=1, bias=True, K=4, reduction=16):
@@ -369,8 +369,8 @@ class DynamicConv2d(nn.Module):
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight[0])
-        bound = 1 / math.sqrt(fan_in)
-        nn.init.uniform_(self.bias, -bound, bound)
+            bound = 1 / math.sqrt(fan_in)
+            nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x):
         B, C, H, W = x.shape
@@ -384,18 +384,19 @@ class DynamicConv2d(nn.Module):
             dim=1
         )  # (B, out, in//groups, kH, kW)
 
-        # 重塑为分组卷积格式
-        target_shape = (
-            self.cv2[0].out_channels,
-            self.cv2[0].in_channels // self.cv2[0].groups,  # 考虑分组卷积
-            1, 1
+        # 重塑为分组卷积格式 - 修复错误
+        combined_weight = combined_weight.view(
+            B * self.out_channels,
+            self.in_channels // self.groups,
+            self.kernel_size,
+            self.kernel_size
         )
-        combined_weight = combined_weight.view(target_shape)
 
         # 处理偏置
         if self.bias is not None:
-            combined_bias = torch.sum(attn_weights.view(B, self.K) * self.bias, dim=1)
-            combined_bias = combined_bias.repeat_interleave(self.out_channels).view(B, -1)
+            # 计算加权偏置
+            combined_bias = torch.sum(attn_weights.view(B, self.K) * self.bias, dim=1)  # (B, out_channels)
+            combined_bias = combined_bias.view(B * self.out_channels)
         else:
             combined_bias = None
 
@@ -404,7 +405,7 @@ class DynamicConv2d(nn.Module):
         output = F.conv2d(
             x,
             weight=combined_weight,
-            bias=None,
+            bias=combined_bias,
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
@@ -414,15 +415,11 @@ class DynamicConv2d(nn.Module):
         # 恢复输出形状
         output = output.view(B, self.out_channels, output.size(2), output.size(3))
 
-        # 添加偏置
-        if combined_bias is not None:
-            output += combined_bias.view(B, self.out_channels, 1, 1)
-
         return output
 
 
 class AdaptivePooling(nn.Module):
-    """自适应池化层 - 动态调整感受野"""
+    """自适应池化层 - 动态调整感受野 - 修复版本"""
 
     def __init__(self, channels, max_kernel=7, min_kernel=3):
         super().__init__()
@@ -451,8 +448,7 @@ class AdaptivePooling(nn.Module):
 
         # 动态选择卷积核大小
         kernel_size = self.min_kernel + (self.max_kernel - self.min_kernel) * max_weight.mean()
-        kernel_size = int(kernel_size.round())
-        kernel_size = max(self.min_kernel, min(kernel_size, self.max_kernel))
+        kernel_size = int(kernel_size.round().clamp(self.min_kernel, self.max_kernel))
 
         # 动态填充
         padding = kernel_size // 2
@@ -477,7 +473,7 @@ class AdaptivePooling(nn.Module):
 
 
 class DynamicSPPF(nn.Module):
-    """动态卷积增强的SPPF模块"""
+    """动态卷积增强的SPPF模块 - 修复版本"""
 
     def __init__(self, c1, c2, k=5, bins=100):
         super().__init__()
@@ -493,7 +489,7 @@ class DynamicSPPF(nn.Module):
 
         # 动态输出卷积
         self.cv2 = nn.Sequential(
-            DynamicConv2d(2 * c1, c2, kernel_size=1, stride=1, padding=0, K=4),
+            DynamicConv2d(c1 // 2 * 2, c2, kernel_size=1, stride=1, padding=0, K=4),  # 修正输入通道数
             nn.BatchNorm2d(c2),
             nn.SiLU()
         )
@@ -516,8 +512,8 @@ class DynamicSPPF(nn.Module):
         y2 = self.pool(y1)
         y3 = self.pool(y2)
 
-        # 特征拼接 (减少分支数提升效率)
-        x = torch.cat([y0, y3], dim=1)  # 原始特征 + 最深特征
+        # 特征拼接 (原始特征 + 最深特征)
+        x = torch.cat([y0, y3], dim=1)  # 通道维度拼接
 
         # 动态输出卷积
         x = self.cv2(x)
