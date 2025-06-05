@@ -232,116 +232,52 @@ class EnhancedCoordAtt(nn.Module):
         return identity * att + x  # 残差连接
 
 
-class EnhancedRFAtt(nn.Module):
-    """增强版感受野注意力机制 - 优化小目标特征融合"""
+class RFAtt(nn.Module):
+    """感受野注意力机制 (Receptive Field Attention)"""
 
-    def __init__(self, in_channels, kernels=[1, 3, 5], reduction=16):
+    def __init__(self, in_channels, kernels=[3, 5, 7], reduction=16):
         super().__init__()
         self.branches = nn.ModuleList()
-
-        # 添加1x1卷积分支保留细节信息
-        self.branches.append(
-            nn.Sequential(
-                nn.Conv2d(in_channels, in_channels, kernel_size=1),
-                nn.BatchNorm2d(in_channels),
-                nn.ReLU(inplace=True)
-            ))
-
-        # 添加不同感受野的分支
         for k in kernels:
-            if k > 1:  # 1x1已添加
-                padding = k // 2
-                self.branches.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, in_channels, kernel_size=k, padding=padding, groups=in_channels),
-                        nn.BatchNorm2d(in_channels),
-                        nn.ReLU(inplace=True)
-                    ))
+            padding = k // 2
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, kernel_size=k, padding=padding, groups=in_channels),
+                    nn.BatchNorm2d(in_channels),
+                    nn.ReLU(inplace=True)
+                ))
 
-        # 改进的注意力机制
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
-
-        # 双通道注意力
-        self.fc = nn.Sequential(
-            nn.Linear(in_channels * len(self.branches) * 2, in_channels // reduction),
-            nn.ReLU(inplace=True),
-            nn.Linear(in_channels // reduction, in_channels * len(self.branches)),
-            nn.Sigmoid()
-        )
-
-        # 空间注意力
-        self.spatial_att = nn.Sequential(
-            nn.Conv2d(len(self.branches), 1, kernel_size=7, padding=3),
-            nn.Sigmoid()
-        )
+            self.avg_pool = nn.AdaptiveAvgPool2d(1)
+            self.fc = nn.Sequential(
+                nn.Linear(in_channels * len(kernels), in_channels // reduction),
+                nn.ReLU(inplace=True),
+                nn.Linear(in_channels // reduction, in_channels * len(kernels)),
+                nn.Sigmoid()
+            )
 
     def forward(self, x):
-        batch_size, C, H, W = x.shape
+        batch_size, _, H, W = x.shape
         outputs = []
 
         # 并行多分支卷积
         for branch in self.branches:
             outputs.append(branch(x))
 
-        # 确保所有分支输出尺寸一致
-        target_size = outputs[0].shape[2:]  # 以第一个分支的输出尺寸为目标
-        for i in range(1, len(outputs)):
-            if outputs[i].shape[2:] != target_size:
-                outputs[i] = F.interpolate(outputs[i], size=target_size, mode='bilinear', align_corners=False)
-
         # 拼接多尺度特征
         u = torch.cat(outputs, dim=1)
 
         # 通道注意力
-        avg_out = self.avg_pool(u).view(batch_size, -1)
-        max_out = self.max_pool(u).view(batch_size, -1)
-        channel_out = torch.cat([avg_out, max_out], dim=1)
-        channel_att = self.fc(channel_out).view(batch_size, -1, 1, 1)
-
-        # 空间注意力
-        spatial_in = torch.stack(outputs, dim=1)  # [B, num_branches, C, H, W]
-        spatial_in = spatial_in.mean(dim=2)  # [B, num_branches, H, W]
-        spatial_att = self.spatial_att(spatial_in).unsqueeze(2)  # [B, 1, 1, H, W]
+        s = self.avg_pool(u).view(batch_size, -1)
+        z = self.fc(s).view(batch_size, -1, 1, 1)
 
         # 特征加权融合
-        u_att = u * channel_att
-        u_att = u_att.view(batch_size, len(self.branches), C, H, W)
-        u_att = u_att * spatial_att
-        u_att = u_att.view(batch_size, -1, H, W)
+        att_map = u * z
 
         # 分割加权后的特征
-        split_att = torch.split(u_att, C, dim=1)
+        split_att = torch.split(att_map, x.size(1), dim=1)
 
-        # 特征融合 - 使用自适应权重（修复索引越界问题）
-        # 计算分支权重（确保正确处理单分支情况）
-        spatial_att_mean = spatial_att.mean(dim=[3, 4])  # [B, 1, 1]
-        spatial_att_mean = spatial_att_mean.squeeze(2)  # [B, 1]
-
-        # 检查分支数量
-        num_branches = len(self.branches)
-        if num_branches > 1:
-            weights = F.softmax(spatial_att_mean, dim=1)  # [B, num_branches]
-        else:
-            # 当只有一个分支时，权重固定为1
-            weights = torch.ones(batch_size, 1, device=x.device)
-
-        out = torch.zeros_like(outputs[0])  # 初始化为与分支输出相同尺寸的张量
-
-        # 确保每个特征图尺寸一致
-        for i in range(num_branches):
-            f = split_att[i]
-            if f.shape[2:] != target_size:
-                f = F.interpolate(f, size=target_size, mode='bilinear', align_corners=False)
-
-            # 使用正确的权重维度（处理单分支情况）
-            if num_branches > 1:
-                w = weights[:, i].view(batch_size, 1, 1, 1)  # [B, 1, 1, 1]
-            else:
-                w = weights.view(batch_size, 1, 1, 1)  # [B, 1, 1, 1]
-
-            out += w * f
-
+        # 特征融合
+        out = sum(split_att) / len(split_att)
         return out
 
 
@@ -380,7 +316,7 @@ class CA_RFA_EnhancedSPPF(nn.Module):
         )
 
         # 感受野注意力模块 - 使用增强版
-        self.rfa = EnhancedRFAtt(c2, kernels=[1, 3, 5])
+        self.rfa = RFAtt(c2, kernels=[1, 3, 5])
 
         # 残差连接 - 使用卷积保留更多信息
         self.residual = nn.Sequential(
