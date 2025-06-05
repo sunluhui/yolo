@@ -1,5 +1,7 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """Block modules."""
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -327,6 +329,202 @@ class CA_RFA_SPPF(nn.Module):
 
         # 残差连接 + 自适应融合
         return identity + self.alpha * x
+
+
+class DynamicConv2d(nn.Module):
+    """CVPR 2024 动态卷积实现"""
+
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1,
+                 dilation=1, groups=1, bias=True, K=4, reduction=16):
+        super().__init__()
+        self.K = K  # 卷积核数量
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
+
+        # 生成多个卷积核
+        self.weight = nn.Parameter(
+            torch.randn(K, out_channels, in_channels // groups, kernel_size, kernel_size),
+            requires_grad=True
+        )
+
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(K, out_channels), requires_grad=True)
+        else:
+            self.bias = None
+
+        # 注意力机制生成核权重
+        self.attention = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_channels, in_channels // reduction, 1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels // reduction, K, 1),
+            nn.Softmax(dim=1))
+
+        # 初始化参数
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight[0])
+        bound = 1 / math.sqrt(fan_in)
+        nn.init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+
+        # 生成注意力权重 (B, K, 1, 1)
+        attn_weights = self.attention(x).view(B, self.K, 1, 1)
+
+        # 加权融合卷积核
+        combined_weight = torch.sum(
+            attn_weights[:, :, None, None, None, None] * self.weight[None],
+            dim=1
+        )  # (B, out, in//groups, kH, kW)
+
+        # 重塑为分组卷积格式
+        combined_weight = combined_weight.view(
+            B * self.out_channels,
+            self.in_channels // self.groups,
+            self.kernel_size,
+            self.kernel_size
+        )
+
+        # 处理偏置
+        if self.bias is not None:
+            combined_bias = torch.sum(attn_weights.view(B, self.K) * self.bias, dim=1)
+            combined_bias = combined_bias.repeat_interleave(self.out_channels).view(B, -1)
+        else:
+            combined_bias = None
+
+        # 分组卷积实现
+        x = x.view(1, B * C, H, W)  # 合并批量维度
+        output = F.conv2d(
+            x,
+            weight=combined_weight,
+            bias=None,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=B * self.groups
+        )
+
+        # 恢复输出形状
+        output = output.view(B, self.out_channels, output.size(2), output.size(3))
+
+        # 添加偏置
+        if combined_bias is not None:
+            output += combined_bias.view(B, self.out_channels, 1, 1)
+
+        return output
+
+
+class AdaptivePooling(nn.Module):
+    """自适应池化层 - 动态调整感受野"""
+
+    def __init__(self, channels, max_kernel=7, min_kernel=3):
+        super().__init__()
+        self.max_kernel = max_kernel
+        self.min_kernel = min_kernel
+        self.pool_types = ['max', 'avg']
+
+        # 池化层选择器
+        self.selector = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, 32, 1),
+            nn.ReLU(),
+            nn.Conv2d(32, 2, 1),
+            nn.Softmax(dim=1)
+        )
+
+        # 卷积池化层
+        self.conv_pool = nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+
+        # 动态选择池化类型
+        pool_weights = self.selector(x).view(B, 2)
+        max_weight, avg_weight = pool_weights[:, 0], pool_weights[:, 1]
+
+        # 动态选择卷积核大小
+        kernel_size = self.min_kernel + (self.max_kernel - self.min_kernel) * max_weight.mean()
+        kernel_size = int(kernel_size.round())
+        kernel_size = max(self.min_kernel, min(kernel_size, self.max_kernel))
+
+        # 动态填充
+        padding = kernel_size // 2
+
+        # 最大池化
+        max_pool = F.max_pool2d(
+            x, kernel_size=kernel_size, stride=1, padding=padding
+        )
+
+        # 平均池化
+        avg_pool = F.avg_pool2d(
+            x, kernel_size=kernel_size, stride=1, padding=padding
+        )
+
+        # 融合池化结果
+        combined_pool = max_weight.view(B, 1, 1, 1) * max_pool + avg_weight.view(B, 1, 1, 1) * avg_pool
+
+        # 卷积池化增强
+        conv_pool = self.conv_pool(x)
+
+        return 0.5 * combined_pool + 0.5 * conv_pool
+
+
+class DynamicSPPF(nn.Module):
+    """动态卷积增强的SPPF模块"""
+
+    def __init__(self, c1, c2, k=5, bins=100):
+        super().__init__()
+        # 使用动态卷积替代标准卷积
+        self.cv1 = nn.Sequential(
+            DynamicConv2d(c1, c1 // 2, kernel_size=1, stride=1, padding=0, K=4),
+            nn.BatchNorm2d(c1 // 2),
+            nn.SiLU()
+        )
+
+        # 自适应池化层
+        self.pool = AdaptivePooling(c1 // 2)
+
+        # 动态输出卷积
+        self.cv2 = nn.Sequential(
+            DynamicConv2d(2 * c1, c2, kernel_size=1, stride=1, padding=0, K=4),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+        # 残差连接
+        self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
+
+        # 自适应融合参数
+        self.alpha = nn.Parameter(torch.tensor(0.6))
+
+    def forward(self, x):
+        identity = self.residual(x)
+
+        # 动态卷积减少通道
+        x = self.cv1(x)
+
+        # 多尺度特征提取
+        y0 = x
+        y1 = self.pool(x)
+        y2 = self.pool(y1)
+        y3 = self.pool(y2)
+
+        # 特征拼接 (减少分支数提升效率)
+        x = torch.cat([y0, y3], dim=1)  # 原始特征 + 最深特征
+
+        # 动态输出卷积
+        x = self.cv2(x)
+
+        # 残差连接
+        return identity + self.alpha * x
+
 
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
