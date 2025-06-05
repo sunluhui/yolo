@@ -167,6 +167,285 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class MultiModalFusion(nn.Module):
+    """融合可见光与红外特征的小目标增强模块"""
+
+    def __init__(self, c1, c2):
+        super().__init__()
+        self.vis_conv = nn.Sequential(
+            nn.Conv2d(c1, c2, 3, padding=1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+        self.ir_conv = nn.Sequential(
+            nn.Conv2d(c1, c2, 3, padding=1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+        self.fusion_att = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(c2 * 2, c2 // 8, 1),
+            nn.ReLU(),
+            nn.Conv2d(c2 // 8, 2, 1),
+            nn.Softmax(dim=1)
+        )
+
+    def forward(self, vis_feat, ir_feat=None):
+        # 单模态时直接返回可见光特征
+        if ir_feat is None:
+            return self.vis_conv(vis_feat)
+
+        vis_out = self.vis_conv(vis_feat)
+        ir_out = self.ir_conv(ir_feat)
+
+        # 特征拼接
+        fused = torch.cat([vis_out, ir_out], dim=1)
+
+        # 注意力权重
+        att_weights = self.fusion_att(fused)
+        v_weight, i_weight = att_weights[:, 0:1], att_weights[:, 1:2]
+
+        # 加权融合
+        return v_weight * vis_out + i_weight * ir_out
+
+
+class FreqEnhancedCoordAtt(nn.Module):
+    """融合频域信息的增强坐标注意力"""
+
+    def __init__(self, in_channels, reduction=16):
+        super().__init__()
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        mid_channels = max(8, in_channels // reduction)
+
+        # 频域处理分支
+        self.fft_conv = nn.Sequential(
+            nn.Conv2d(1, 8, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 1, 3, padding=1)
+        )
+
+        # 空间处理分支
+        self.spatial_conv = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, 1),
+            nn.BatchNorm2d(mid_channels),
+            nn.SiLU(),
+            nn.Conv2d(mid_channels, in_channels, 1)
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # 频域分析
+        fft_feat = torch.fft.rfft2(x, norm='ortho')
+        fft_mag = torch.abs(fft_feat)
+        fft_phase = torch.angle(fft_feat)
+
+        # 增强高频分量
+        fft_mag_enhanced = self.fft_conv(fft_mag.unsqueeze(1)).squeeze(1)
+        fft_enhanced = torch.fft.irfft2(
+            fft_mag_enhanced * torch.exp(1j * fft_phase),
+            s=x.shape[-2:],
+            norm='ortho'
+        )
+
+        # 空间注意力
+        h = self.pool_h(x)
+        w = self.pool_w(x)
+        spatial_feat = torch.cat([h, w], dim=2)
+        spatial_att = self.spatial_conv(spatial_feat)
+
+        # 双域融合
+        freq_att = self.sigmoid(fft_enhanced)
+        spatial_att = self.sigmoid(spatial_att)
+
+        # 组合注意力
+        combined_att = freq_att * spatial_att
+
+        return x * combined_att + x
+
+
+class DynamicRFAtt(nn.Module):
+    """自适应选择最佳感受野的注意力机制"""
+
+    def __init__(self, in_channels, kernels=[1, 3, 5, 7]):
+        super().__init__()
+        self.branches = nn.ModuleList()
+        self.kernels = kernels
+
+        # 创建不同感受野的分支
+        for k in kernels:
+            padding = k // 2
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, k, padding=padding, groups=in_channels),
+                    nn.BatchNorm2d(in_channels),
+                    nn.SiLU()
+                )
+            )
+
+        # 动态选择器
+        self.selector = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(in_channels, 32),
+            nn.ReLU(),
+            nn.Linear(32, len(kernels)),
+            nn.Softmax(dim=1)
+        )
+
+    def forward(self, x):
+        # 并行计算各分支
+        branch_outputs = [branch(x) for branch in self.branches]
+
+        # 生成选择权重
+        weights = self.selector(x)  # [B, num_kernels]
+
+        # 加权融合
+        out = torch.zeros_like(x)
+        for i in range(len(self.kernels)):
+            weight = weights[:, i].view(-1, 1, 1, 1)
+            out += weight * branch_outputs[i]
+
+        return out
+
+
+class SmallObjectAmplifier(nn.Module):
+    """针对小目标的特征增强模块"""
+
+    def __init__(self, in_channels, scale_factors=[2, 4]):
+        super().__init__()
+        self.scale_factors = scale_factors
+        self.conv_layers = nn.ModuleList()
+
+        # 创建多尺度卷积
+        for factor in scale_factors:
+            self.conv_layers.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels // 4, 3, padding=1),
+                    nn.BatchNorm2d(in_channels // 4),
+                    nn.SiLU()
+                )
+            )
+
+        # 特征融合
+        self.fusion = nn.Sequential(
+            nn.Conv2d(in_channels // 4 * len(scale_factors), in_channels, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        amplified_features = []
+        B, C, H, W = x.shape
+
+        for i, factor in enumerate(self.scale_factors):
+            # 上采样
+            resized = F.interpolate(x, scale_factor=factor, mode='bilinear', align_corners=False)
+
+            # 特征提取
+            features = self.conv_layers[i](resized)
+
+            # 下采样回原尺寸
+            features = F.interpolate(features, size=(H, W), mode='bilinear', align_corners=False)
+            amplified_features.append(features)
+
+        # 融合放大特征
+        fused = self.fusion(torch.cat(amplified_features, dim=1))
+
+        # 增强小目标特征
+        return x * (1 + fused)
+
+
+class AdvancedCA_RFA_EnhancedSPPF(nn.Module):
+    """终极改进版SPPF模块 - 专为无人机小目标检测优化"""
+
+    def __init__(self, c1, c2, k=5, multimodal=False):
+        super().__init__()
+        self.multimodal = multimodal
+        c_ = c1 * 2 // 3  # 减少通道压缩
+
+        # 多模态输入处理
+        self.modal_fusion = MultiModalFusion(c1, c_) if multimodal else None
+
+        # 输入卷积 - 使用可变形卷积
+        self.cv1 = nn.Sequential(
+            nn.Conv2d(c1, c1, kernel_size=3, padding=1, groups=c1),  # 深度卷积
+            nn.Conv2d(c1, c_, kernel_size=1),  # 点卷积
+            nn.BatchNorm2d(c_),
+            nn.SiLU()
+        )
+
+        # 多尺度池化分支
+        self.pool1 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+        self.pool2 = nn.MaxPool2d(kernel_size=5, stride=1, padding=2)
+        self.pool3 = nn.MaxPool2d(kernel_size=7, stride=1, padding=3)
+
+        # 频域增强坐标注意力
+        self.ca0 = FreqEnhancedCoordAtt(c_)
+        self.ca1 = FreqEnhancedCoordAtt(c_)
+        self.ca2 = FreqEnhancedCoordAtt(c_)
+        self.ca3 = FreqEnhancedCoordAtt(c_)
+
+        # 输出卷积
+        self.cv2 = nn.Sequential(
+            nn.Conv2d(c_ * 4, c2, 1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+        # 动态感受野注意力
+        self.rfa = DynamicRFAtt(c2, kernels=[1, 3, 5, 7])
+
+        # 残差连接
+        self.residual = nn.Sequential(
+            nn.Conv2d(c1, c1, 3, padding=1, groups=c1),
+            nn.Conv2d(c1, c2, 1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        ) if c1 != c2 else nn.Identity()
+
+        # 小目标特征放大
+        self.object_amp = SmallObjectAmplifier(c2, scale_factors=[2, 4])
+
+        # 自适应参数
+        self.alpha = nn.Parameter(torch.tensor(0.6))
+        self.beta = nn.Parameter(torch.tensor(0.4))
+
+    def forward(self, x, ir_x=None):
+        # 多模态融合
+        if self.multimodal and ir_x is not None:
+            x = self.modal_fusion(x, ir_x)
+        elif self.multimodal:
+            x = self.modal_fusion(x)
+
+        identity = self.residual(x)
+
+        # 第一阶段：通道调整
+        x = self.cv1(x)
+
+        # 多尺度池化分支
+        y0 = self.ca0(x)  # 原始特征 + CA
+        y1 = self.ca1(self.pool1(x))
+        y2 = self.ca2(self.pool2(x))
+        y3 = self.ca3(self.pool3(x))
+
+        # 特征拼接
+        x = torch.cat([y0, y1, y2, y3], dim=1)
+
+        # 输出卷积
+        x = self.cv2(x)
+
+        # 感受野注意力
+        x = self.rfa(x)
+
+        # 小目标特征放大
+        x = self.object_amp(x)
+
+        # 残差连接 + 自适应融合
+        return self.beta * identity + self.alpha * x
+
+
 class EnhancedCoordAtt(nn.Module):
     """增强版坐标注意力机制 - 改进小目标特征提取"""
 
