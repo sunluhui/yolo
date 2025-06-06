@@ -279,11 +279,58 @@ class EnhancedSPPF(nn.Module):
         return y
 
 
+class SmallObjectAmplifier(nn.Module):
+    """针对小目标的特征增强模块"""
+
+    def __init__(self, in_channels, scale_factors=[2, 4]):
+        super().__init__()
+        self.scale_factors = scale_factors
+        self.conv_layers = nn.ModuleList()
+
+        # 创建多尺度卷积
+        for factor in scale_factors:
+            self.conv_layers.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels // 4, 3, padding=1),
+                    nn.BatchNorm2d(in_channels // 4),
+                    nn.SiLU()
+                )
+            )
+
+        # 特征融合
+        self.fusion = nn.Sequential(
+            nn.Conv2d(in_channels // 4 * len(scale_factors), in_channels, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        amplified_features = []
+        B, C, H, W = x.shape
+
+        for i, factor in enumerate(self.scale_factors):
+            # 上采样
+            resized = F.interpolate(x, scale_factor=factor, mode='bilinear', align_corners=False)
+
+            # 特征提取
+            features = self.conv_layers[i](resized)
+
+            # 下采样回原尺寸
+            features = F.interpolate(features, size=(H, W), mode='bilinear', align_corners=False)
+            amplified_features.append(features)
+
+        # 融合放大特征
+        fused = self.fusion(torch.cat(amplified_features, dim=1))
+
+        # 增强小目标特征
+        return x * (1 + fused)
+
+
 class AdaptiveSPPF(nn.Module):
-    def __init__(self, in_channels, out_channels, scales=[1, 2, 4, 8]):
+    def __init__(self, in_channels, out_channels, scales=[1, 2, 4, 8], use_soa=True):
         super().__init__()
         self.scales = scales
         self.branches = nn.ModuleDict()
+        self.use_soa = use_soa
 
         # 主分支（恒等映射）
         self.branches['identity'] = nn.Identity()
@@ -294,6 +341,10 @@ class AdaptiveSPPF(nn.Module):
                 nn.AdaptiveMaxPool2d(output_size=(None, None)),  # 动态内核占位
                 nn.Conv2d(in_channels, out_channels // len(scales), 1, bias=False)
             )
+
+        # 小目标增强模块
+        if self.use_soa:
+            self.soa = SmallObjectAmplifier(in_channels)
 
         self.fusion_conv = nn.Conv2d(
             in_channels + out_channels // len(scales) * len(scales),
@@ -308,6 +359,10 @@ class AdaptiveSPPF(nn.Module):
         return kernel_size, stride
 
     def forward(self, x):
+        # 小目标增强
+        if self.use_soa:
+            x = self.soa(x)
+
         outputs = [self.branches['identity'](x)]
 
         for scale in self.scales:
@@ -475,52 +530,6 @@ class DynamicRFAtt(nn.Module):
             out += weight * branch_outputs[i]
 
         return out
-
-
-class SmallObjectAmplifier(nn.Module):
-    """针对小目标的特征增强模块"""
-
-    def __init__(self, in_channels, scale_factors=[2, 4]):
-        super().__init__()
-        self.scale_factors = scale_factors
-        self.conv_layers = nn.ModuleList()
-
-        # 创建多尺度卷积
-        for factor in scale_factors:
-            self.conv_layers.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, in_channels // 4, 3, padding=1),
-                    nn.BatchNorm2d(in_channels // 4),
-                    nn.SiLU()
-                )
-            )
-
-        # 特征融合
-        self.fusion = nn.Sequential(
-            nn.Conv2d(in_channels // 4 * len(scale_factors), in_channels, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        amplified_features = []
-        B, C, H, W = x.shape
-
-        for i, factor in enumerate(self.scale_factors):
-            # 上采样
-            resized = F.interpolate(x, scale_factor=factor, mode='bilinear', align_corners=False)
-
-            # 特征提取
-            features = self.conv_layers[i](resized)
-
-            # 下采样回原尺寸
-            features = F.interpolate(features, size=(H, W), mode='bilinear', align_corners=False)
-            amplified_features.append(features)
-
-        # 融合放大特征
-        fused = self.fusion(torch.cat(amplified_features, dim=1))
-
-        # 增强小目标特征
-        return x * (1 + fused)
 
 
 class AdvancedCA_RFA_EnhancedSPPF(nn.Module):
