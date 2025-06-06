@@ -167,6 +167,53 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class AdaptiveSPPF(nn.Module):
+    def __init__(self, in_channels, out_channels, scales=[1, 2, 4, 8]):
+        super().__init__()
+        self.scales = scales
+        self.branches = nn.ModuleDict()
+
+        # 主分支（恒等映射）
+        self.branches['identity'] = nn.Identity()
+
+        # 多尺度自适应池化分支
+        for scale in scales:
+            self.branches[f'pool_{scale}'] = nn.Sequential(
+                nn.AdaptiveMaxPool2d(output_size=(None, None)),  # 动态内核占位
+                nn.Conv2d(in_channels, out_channels // len(scales), 1, bias=False)
+            )
+
+        self.fusion_conv = nn.Conv2d(
+            in_channels + out_channels // len(scales) * len(scales),
+            out_channels, 1
+        )
+
+    def _dynamic_pool_params(self, x, scale):
+        """动态计算池化参数"""
+        H, W = x.shape[2:]
+        kernel_size = max(1, int(min(H, W) * scale / 32))  # 基于特征图尺寸的缩放因子
+        stride = max(1, kernel_size // 2)  # 自动步长策略
+        return kernel_size, stride
+
+    def forward(self, x):
+        outputs = [self.branches['identity'](x)]
+
+        for scale in self.scales:
+            # 动态生成池化层
+            kernel, stride = self._dynamic_pool_params(x, scale)
+            pool_layer = nn.MaxPool2d(kernel, stride, kernel // 2)
+
+            # 执行池化并处理
+            pooled = pool_layer(x)
+            processed = self.branches[f'pool_{scale}'](pooled)
+            outputs.append(nn.functional.interpolate(
+                processed, size=x.shape[2:], mode='nearest'
+            ))
+
+        # 多尺度特征融合
+        return self.fusion_conv(torch.cat(outputs, dim=1))
+
+
 class ESPCN_UpSample(nn.Module):
     """轻量级亚像素卷积上采样 - 增强小目标特征"""
     def __init__(self, c, scale_factor=2):
