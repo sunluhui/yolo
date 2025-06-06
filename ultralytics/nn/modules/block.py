@@ -169,93 +169,34 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
-class DeformableConv2d(nn.Module):
-    """纯PyTorch实现的可变形卷积，不依赖torchvision"""
 
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
+class Conv(nn.Module):
+    """Standard convolution with CBR (Conv+BN+SiLU)"""
+
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):
         super().__init__()
-        self.padding = padding
-        self.stride = stride
-
-        # 计算偏移量通道数
-        offset_channels = 2 * kernel_size * kernel_size
-
-        # 修改这里：将 kernel_size 改为 k
-        self.offset_conv = Conv(in_channels, offset_channels, k=kernel_size, stride=stride, padding=padding)
-
-        # 初始化偏移量权重为0
-        nn.init.constant_(self.offset_conv.conv.weight, 0)
-        if self.offset_conv.conv.bias is not None:
-            nn.init.constant_(self.offset_conv.conv.bias, 0)
-
-        # 使用可变形卷积
-        self.deform_conv = torchvision.ops.DeformConv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias
-        )
-
-    def _get_grid(self, kernel_size):
-        """生成基础采样网格"""
-        x, y = torch.meshgrid(
-            torch.arange(-(kernel_size // 2), kernel_size // 2 + 1),
-            torch.arange(-(kernel_size // 2), kernel_size // 2 + 1),
-            indexing='ij'
-        )
-        grid = torch.stack([y, x], dim=-1).float()  # [kh, kw, 2]
-        return grid.view(-1, 2)  # [kh*kw, 2]
+        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
 
     def forward(self, x):
-        offsets = self.offset_conv(x)  # [b, 2*kh*kw, h, w]
-        b, c, h, w = x.size()
-        kh, kw = self.kernel_size, self.kernel_size
+        return self.act(self.bn(self.conv(x)))
 
-        # 重塑偏移量
-        offsets = offsets.permute(0, 2, 3, 1).contiguous()  # [b, h, w, 2*kh*kw]
-        offsets = offsets.view(b, h, w, kh * kw, 2)  # [b, h, w, kh*kw, 2]
 
-        # 生成采样网格
-        grid = self.grid.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # [1, 1, 1, kh*kw, 2]
-        grid = grid.expand(b, h, w, -1, -1)  # [b, h, w, kh*kw, 2]
-
-        # 添加偏移量
-        grid = grid + offsets  # [b, h, w, kh*kw, 2]
-
-        # 归一化到[-1, 1]
-        grid[:, :, :, :, 0] = 2 * grid[:, :, :, :, 0] / max(w - 1, 1) - 1
-        grid[:, :, :, :, 1] = 2 * grid[:, :, :, :, 1] / max(h - 1, 1) - 1
-
-        # 重塑为F.grid_sample所需的格式
-        grid = grid.permute(0, 3, 1, 2, 4).contiguous()  # [b, kh*kw, h, w, 2]
-        grid = grid.view(b, kh * kw * h, w, 2)  # [b, kh*kw*h, w, 2]
-
-        # 重塑输入以应用采样
-        x = x.unsqueeze(2).expand(-1, -1, kh * kw, -1, -1)  # [b, c, kh*kw, h, w]
-        x = x.reshape(b, c * kh * kw, h, w)  # [b, c*kh*kw, h, w]
-
-        # 应用采样
-        x_offset = F.grid_sample(
-            x, grid, mode='bilinear', padding_mode='zeros', align_corners=False
-        )  # [b, c*kh*kw, h, w]
-
-        # 重塑回原始形状
-        x_offset = x_offset.view(b, c, kh, kw, h, w)
-        x_offset = x_offset.permute(0, 4, 5, 1, 2, 3).contiguous()  # [b, h, w, c, kh, kw]
-        x_offset = x_offset.view(b * h * w, c, kh, kw)
-
-        # 应用卷积
-        out = self.conv(x_offset)  # [b*h*w, out_channels, 1, 1]
-        out = out.view(b, h, w, -1).permute(0, 3, 1, 2).contiguous()  # [b, out_channels, h, w]
-
-        return out
+def autopad(k, p=None):  # kernel, padding
+    # Pad to 'same'
+    if p is None:
+        p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
+    return p
 
 
 class ChannelAttention(nn.Module):
-    """Channel attention module to focus on important feature channels"""
+    """Channel attention module"""
 
     def __init__(self, in_channels, reduction_ratio=16):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.max_pool = nn.AdaptiveMaxPool2d(1)
-
         self.fc = nn.Sequential(
             nn.Conv2d(in_channels, in_channels // reduction_ratio, 1, bias=False),
             nn.ReLU(),
@@ -270,7 +211,7 @@ class ChannelAttention(nn.Module):
 
 
 class SpatialAttention(nn.Module):
-    """Spatial attention module to focus on important spatial regions"""
+    """Spatial attention module"""
 
     def __init__(self, kernel_size=7):
         super().__init__()
@@ -288,61 +229,54 @@ class EnhancedSPPF(nn.Module):
     """Enhanced Spatial Pyramid Pooling - Fast (SPPF) layer for improved small object detection"""
 
     def __init__(self, c1, c2, k=5):
-        """
-        Initialize the EnhancedSPPF layer with given input/output channels and kernel size.
-
-        Args:
-            c1: Number of input channels
-            c2: Number of output channels
-            k: Kernel size for max pooling layers
-        """
         super().__init__()
         c_ = c1 // 2  # hidden channels
 
-        # Feature extraction with deformable convolution for small objects
+        # 基础特征提取
         self.cv1 = Conv(c1, c_, 1, 1)
-        self.deform_conv = DeformableConv2d(c_, c_, kernel_size=3, padding=1)
 
-        # Multi-scale pyramid pooling with different kernel sizes
+        # 多尺度池化 - 使用不同尺寸的池化核捕获不同大小的目标
         self.m1 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
-        self.m2 = nn.MaxPool2d(kernel_size=k + 4, stride=1, padding=(k + 4) // 2)  # Larger scale
-        self.m3 = nn.MaxPool2d(kernel_size=k + 8, stride=1, padding=(k + 8) // 2)  # Even larger scale
+        self.m2 = nn.MaxPool2d(kernel_size=k + 4, stride=1, padding=(k + 4) // 2)  # 更大的池化核
+        self.m3 = nn.MaxPool2d(kernel_size=k + 8, stride=1, padding=(k + 8) // 2)  # 最大的池化核
 
-        # Attention mechanisms
+        # 注意力机制 - 增强对小目标的关注
         self.channel_attn = ChannelAttention(c_ * 4)
         self.spatial_attn = SpatialAttention()
 
-        # Final convolution with feature fusion
+        # 最终特征融合
         self.cv2 = Conv(c_ * 4, c2, 1, 1)
 
-        # Skip connection for shallow features
-        self.shallow_conv = Conv(c1, c_, 1, 1)
+        # 浅层特征连接 - 帮助保留小目标的细节信息
+        self.shallow_conv = Conv(c1, c_ // 2, 1, 1)  # 减少通道数以匹配
+        self.fuse_conv = Conv(c2 + c_ // 2, c2, 1, 1)  # 融合深层和浅层特征
 
     def forward(self, x):
-        """Forward pass through the EnhancedSPPF layer"""
-        # Extract initial features
+        # 提取基础特征
         x1 = self.cv1(x)
-        x1 = self.deform_conv(x1)  # Apply deformable convolution
 
-        # Multi-scale pooling
+        # 多尺度池化
         x2 = self.m1(x1)
         x3 = self.m2(x1)
         x4 = self.m3(x1)
 
-        # Concatenate multi-scale features
+        # 拼接多尺度特征
         y = torch.cat([x1, x2, x3, x4], dim=1)
 
-        # Apply attention mechanisms
+        # 应用注意力机制
         y = self.channel_attn(y)
         y = self.spatial_attn(y)
 
-        # Shallow feature fusion
+        # 通过卷积融合特征
+        y = self.cv2(y)
+
+        # 浅层特征融合 - 对小目标检测尤为重要
         shallow_features = self.shallow_conv(x)
         shallow_features = F.interpolate(shallow_features, size=y.shape[2:], mode='bilinear', align_corners=False)
         y = torch.cat([y, shallow_features], dim=1)
+        y = self.fuse_conv(y)
 
-        # Final convolution
-        return self.cv2(y)
+        return y
 
 
 class AdaptiveSPPF(nn.Module):
