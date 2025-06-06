@@ -167,6 +167,134 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class DeformableConv2d(nn.Module):
+    """Deformable Convolution module to handle irregular object shapes"""
+
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
+        super().__init__()
+        self.padding = padding
+
+        # Regular convolution
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=0, bias=bias)
+
+        # Offset generator
+        self.offset_conv = nn.Conv2d(in_channels, 2 * kernel_size * kernel_size, kernel_size, stride, padding)
+        nn.init.constant_(self.offset_conv.weight, 0)
+        nn.init.constant_(self.offset_conv.bias, 0)
+
+        # Use grouped convolution to reduce parameter count
+        self.channel_multiplier = 2
+
+    def forward(self, x):
+        offsets = self.offset_conv(x)
+        x = torch.ops.torchvision.deform_conv2d(
+            x,
+            self.conv.weight,
+            offsets,
+            padding=self.padding,
+            stride=self.conv.stride,
+            channel_multiplier=self.channel_multiplier
+        )
+        return x
+
+
+class ChannelAttention(nn.Module):
+    """Channel attention module to focus on important feature channels"""
+
+    def __init__(self, in_channels, reduction_ratio=16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        self.fc = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels // reduction_ratio, 1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(in_channels // reduction_ratio, in_channels, 1, bias=False)
+        )
+
+    def forward(self, x):
+        avg_out = self.fc(self.avg_pool(x))
+        max_out = self.fc(self.max_pool(x))
+        out = avg_out + max_out
+        return torch.sigmoid(out) * x
+
+
+class SpatialAttention(nn.Module):
+    """Spatial attention module to focus on important spatial regions"""
+
+    def __init__(self, kernel_size=7):
+        super().__init__()
+        self.conv = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        out = torch.cat([avg_out, max_out], dim=1)
+        out = self.conv(out)
+        return torch.sigmoid(out) * x
+
+
+class EnhancedSPPF(nn.Module):
+    """Enhanced Spatial Pyramid Pooling - Fast (SPPF) layer for improved small object detection"""
+
+    def __init__(self, c1, c2, k=5):
+        """
+        Initialize the EnhancedSPPF layer with given input/output channels and kernel size.
+
+        Args:
+            c1: Number of input channels
+            c2: Number of output channels
+            k: Kernel size for max pooling layers
+        """
+        super().__init__()
+        c_ = c1 // 2  # hidden channels
+
+        # Feature extraction with deformable convolution for small objects
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.deform_conv = DeformableConv2d(c_, c_, kernel_size=3, padding=1)
+
+        # Multi-scale pyramid pooling with different kernel sizes
+        self.m1 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.m2 = nn.MaxPool2d(kernel_size=k + 4, stride=1, padding=(k + 4) // 2)  # Larger scale
+        self.m3 = nn.MaxPool2d(kernel_size=k + 8, stride=1, padding=(k + 8) // 2)  # Even larger scale
+
+        # Attention mechanisms
+        self.channel_attn = ChannelAttention(c_ * 4)
+        self.spatial_attn = SpatialAttention()
+
+        # Final convolution with feature fusion
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+
+        # Skip connection for shallow features
+        self.shallow_conv = Conv(c1, c_, 1, 1)
+
+    def forward(self, x):
+        """Forward pass through the EnhancedSPPF layer"""
+        # Extract initial features
+        x1 = self.cv1(x)
+        x1 = self.deform_conv(x1)  # Apply deformable convolution
+
+        # Multi-scale pooling
+        x2 = self.m1(x1)
+        x3 = self.m2(x1)
+        x4 = self.m3(x1)
+
+        # Concatenate multi-scale features
+        y = torch.cat([x1, x2, x3, x4], dim=1)
+
+        # Apply attention mechanisms
+        y = self.channel_attn(y)
+        y = self.spatial_attn(y)
+
+        # Shallow feature fusion
+        shallow_features = self.shallow_conv(x)
+        shallow_features = F.interpolate(shallow_features, size=y.shape[2:], mode='bilinear', align_corners=False)
+        y = torch.cat([y, shallow_features], dim=1)
+
+        # Final convolution
+        return self.cv2(y)
+
+
 class AdaptiveSPPF(nn.Module):
     def __init__(self, in_channels, out_channels, scales=[1, 2, 4, 8]):
         super().__init__()
@@ -212,80 +340,6 @@ class AdaptiveSPPF(nn.Module):
 
         # 多尺度特征融合
         return self.fusion_conv(torch.cat(outputs, dim=1))
-
-
-class ESPCN_UpSample(nn.Module):
-    """轻量级亚像素卷积上采样 - 增强小目标特征"""
-    def __init__(self, c, scale_factor=2):
-        super().__init__()
-        self.conv = nn.Conv2d(c, c * (scale_factor ** 2), 3, padding=1)
-        self.ps = nn.PixelShuffle(scale_factor)
-        self.act = nn.SiLU()
-
-    def forward(self, x):
-        return self.act(self.ps(self.conv(x)))
-
-
-class EnhancedSPPF(nn.Module):
-    """增强版SPPF模块 - 专为小目标检测优化"""
-
-    def __init__(self, c1, c2, k=5, scale_factor=2):
-        super().__init__()
-        # 通道调整
-        c_ = max(c1 // 2, 16)
-
-        # 上采样分支 - 增强小目标特征
-        self.upsample = ESPCN_UpSample(c1, scale_factor)
-
-        # 多尺度池化分支
-        self.cv1 = Conv(c1, c_, 1, 1)
-
-        # 多尺度池化分支
-        self.m1 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
-        self.m2 = nn.AvgPool2d(kernel_size=k, stride=1, padding=k // 2)
-        self.m3 = nn.MaxPool2d(kernel_size=k + 4, stride=1, padding=(k + 4) // 2)
-
-        # 坐标注意力机制
-        self.attn = CoordAtt(c_ * 4)
-
-        # 输出卷积
-        self.cv2 = Conv(c_ * 4 * (scale_factor ** 2), c2, 1, 1)
-
-        # 残差连接
-        self.use_residual = c1 == c2
-        if self.use_residual:
-            self.shortcut = Conv(c1, c2, 1, 1)
-
-    def forward(self, x):
-        # 原始特征
-        identity = x
-
-        # 上采样增强小目标特征
-        upsampled = self.upsample(x)
-
-        # 多尺度特征提取
-        y = self.cv1(x)
-        y1 = y
-        y2 = self.m1(y)
-        y3 = self.m2(y)
-        y4 = self.m3(y)
-
-        # 特征拼接
-        y = torch.cat([y1, y2, y3, y4], 1)
-
-        # 应用坐标注意力
-        y = self.attn(y)
-
-        # 与上采样特征融合
-        y = torch.cat([y, upsampled], 1) if upsampled.size(2) == y.size(2) else y
-
-        # 输出处理
-        y = self.cv2(y)
-
-        # 残差连接
-        if self.use_residual:
-            return y + self.shortcut(identity)
-        return y
 
 
 class LightFSR(nn.Module):  # 轻量特征超分辨率模块
