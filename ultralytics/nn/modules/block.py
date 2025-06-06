@@ -209,19 +209,26 @@ class RFCA(nn.Module):  # 感受野坐标注意力
 
 
 class MSRFCA_SPPF(nn.Module):
-    def __init__(self, c):
+    def __init__(self, c1, c2, k=5):  # 接收标准参数格式
         super().__init__()
-        self.fsr = LightFSR(c)  # 步骤1: 特征放大
-        self.multipool = MultiPool(c)  # 步骤2: 多尺度池化
-        self.rfca = RFCA(c * 4)  # 步骤3: 感受野注意力 (输入通道=4分支)
-        self.ca = CoordAtt(c)  # 步骤4: 坐标注意力
+        c = c1  # 使用输入通道数
+        self.fsr = LightFSR(c)
+        self.multipool = MultiPool(c)
+        self.rfca = RFCA(c * 4)
+        self.ca = CoordAtt(c * 4)
+        self.conv = Conv(c * 4, c2, 1, 1)  # 添加输出卷积匹配通道数
 
     def forward(self, x):
-        x = self.fsr(x)  # 放大特征
-        # 多分支池化并拼接
-        mp_out = torch.cat([branch(x) for branch in self.multipool.branches], dim=1)
-        x = self.rfca(mp_out)  # RFCA加权
-        return self.ca(x)  # CA增强输出
+        x = self.fsr(x)
+        mp_out = torch.cat([
+            self.multipool.branch1(x),
+            self.multipool.branch2(x),
+            self.multipool.branch3(x),
+            self.multipool.branch4(x)
+        ], dim=1)
+        x = self.rfca(mp_out)
+        x = self.ca(x)
+        return self.conv(x)  # 返回卷积处理后的结果
 
 
 class MultiModalFusion(nn.Module):
