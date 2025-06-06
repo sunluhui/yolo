@@ -167,6 +167,63 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class LightFSR(nn.Module):  # 轻量特征超分辨率模块
+    def __init__(self, c, scale_factor=2):
+        super().__init__()
+        self.conv = nn.Conv2d(c, c * scale_factor ** 2, 3, padding=1)
+        self.ps = nn.PixelShuffle(scale_factor)  # 上采样2倍
+
+    def forward(self, x):
+        return self.ps(self.conv(x))
+
+
+class MultiPool(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.branch1 = nn.MaxPool2d(5, 1, 2)
+        self.branch2 = nn.AvgPool2d(5, 1, 2)
+        self.branch3 = nn.Sequential(
+            nn.MaxPool2d(3, 1, 1),  # 保持尺寸不变的空洞池化
+            nn.Conv2d(c, c, 3, padding=2, dilation=2)
+        )
+        self.branch4 = nn.Identity()
+
+
+class RFCA(nn.Module):  # 感受野坐标注意力
+    def __init__(self, c):
+        super().__init__()
+        # 多尺度感受野特征提取
+        self.conv3 = nn.Conv2d(c, c, 3, padding=1)
+        self.conv5 = nn.Conv2d(c, c, 5, padding=2)
+        self.conv7 = nn.Conv2d(c, c, 7, padding=3)
+
+        # 坐标注意力生成
+        self.ca = CoordAtt(c * 3)  # 输入拼接后的通道
+
+    def forward(self, x):
+        x3 = self.conv3(x)
+        x5 = self.conv5(x)
+        x7 = self.conv7(x)
+        x_cat = torch.cat([x3, x5, x7], dim=1)
+        return self.ca(x_cat) * x  # 注意力加权
+
+
+class MSRFCA_SPPF(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.fsr = LightFSR(c)  # 步骤1: 特征放大
+        self.multipool = MultiPool(c)  # 步骤2: 多尺度池化
+        self.rfca = RFCA(c * 4)  # 步骤3: 感受野注意力 (输入通道=4分支)
+        self.ca = CoordAtt(c)  # 步骤4: 坐标注意力
+
+    def forward(self, x):
+        x = self.fsr(x)  # 放大特征
+        # 多分支池化并拼接
+        mp_out = torch.cat([branch(x) for branch in self.multipool.branches], dim=1)
+        x = self.rfca(mp_out)  # RFCA加权
+        return self.ca(x)  # CA增强输出
+
+
 class MultiModalFusion(nn.Module):
     """融合可见光与红外特征的小目标增强模块"""
 
