@@ -168,34 +168,78 @@ class SPP(nn.Module):
 
 
 class DeformableConv2d(nn.Module):
-    """Deformable Convolution module to handle irregular object shapes"""
+    """纯PyTorch实现的可变形卷积，不依赖torchvision"""
 
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
         super().__init__()
         self.padding = padding
+        self.stride = stride
+        self.kernel_size = kernel_size
 
-        # Regular convolution
+        # 常规卷积
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=0, bias=bias)
 
-        # Offset generator
+        # 偏移量生成器
         self.offset_conv = nn.Conv2d(in_channels, 2 * kernel_size * kernel_size, kernel_size, stride, padding)
         nn.init.constant_(self.offset_conv.weight, 0)
         nn.init.constant_(self.offset_conv.bias, 0)
 
-        # Use grouped convolution to reduce parameter count
-        self.channel_multiplier = 2
+        # 采样网格
+        self.register_buffer('grid', self._get_grid(kernel_size))
+
+    def _get_grid(self, kernel_size):
+        """生成基础采样网格"""
+        x, y = torch.meshgrid(
+            torch.arange(-(kernel_size // 2), kernel_size // 2 + 1),
+            torch.arange(-(kernel_size // 2), kernel_size // 2 + 1),
+            indexing='ij'
+        )
+        grid = torch.stack([y, x], dim=-1).float()  # [kh, kw, 2]
+        return grid.view(-1, 2)  # [kh*kw, 2]
 
     def forward(self, x):
-        offsets = self.offset_conv(x)
-        x = torch.ops.torchvision.deform_conv2d(
-            x,
-            self.conv.weight,
-            offsets,
-            padding=self.padding,
-            stride=self.conv.stride,
-            channel_multiplier=self.channel_multiplier
-        )
-        return x
+        offsets = self.offset_conv(x)  # [b, 2*kh*kw, h, w]
+        b, c, h, w = x.size()
+        kh, kw = self.kernel_size, self.kernel_size
+
+        # 重塑偏移量
+        offsets = offsets.permute(0, 2, 3, 1).contiguous()  # [b, h, w, 2*kh*kw]
+        offsets = offsets.view(b, h, w, kh * kw, 2)  # [b, h, w, kh*kw, 2]
+
+        # 生成采样网格
+        grid = self.grid.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # [1, 1, 1, kh*kw, 2]
+        grid = grid.expand(b, h, w, -1, -1)  # [b, h, w, kh*kw, 2]
+
+        # 添加偏移量
+        grid = grid + offsets  # [b, h, w, kh*kw, 2]
+
+        # 归一化到[-1, 1]
+        grid[:, :, :, :, 0] = 2 * grid[:, :, :, :, 0] / max(w - 1, 1) - 1
+        grid[:, :, :, :, 1] = 2 * grid[:, :, :, :, 1] / max(h - 1, 1) - 1
+
+        # 重塑为F.grid_sample所需的格式
+        grid = grid.permute(0, 3, 1, 2, 4).contiguous()  # [b, kh*kw, h, w, 2]
+        grid = grid.view(b, kh * kw * h, w, 2)  # [b, kh*kw*h, w, 2]
+
+        # 重塑输入以应用采样
+        x = x.unsqueeze(2).expand(-1, -1, kh * kw, -1, -1)  # [b, c, kh*kw, h, w]
+        x = x.reshape(b, c * kh * kw, h, w)  # [b, c*kh*kw, h, w]
+
+        # 应用采样
+        x_offset = F.grid_sample(
+            x, grid, mode='bilinear', padding_mode='zeros', align_corners=False
+        )  # [b, c*kh*kw, h, w]
+
+        # 重塑回原始形状
+        x_offset = x_offset.view(b, c, kh, kw, h, w)
+        x_offset = x_offset.permute(0, 4, 5, 1, 2, 3).contiguous()  # [b, h, w, c, kh, kw]
+        x_offset = x_offset.view(b * h * w, c, kh, kw)
+
+        # 应用卷积
+        out = self.conv(x_offset)  # [b*h*w, out_channels, 1, 1]
+        out = out.view(b, h, w, -1).permute(0, 3, 1, 2).contiguous()  # [b, out_channels, h, w]
+
+        return out
 
 
 class ChannelAttention(nn.Module):
