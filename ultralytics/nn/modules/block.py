@@ -167,6 +167,80 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class ESPCN_UpSample(nn.Module):
+    """轻量级亚像素卷积上采样 - 增强小目标特征"""
+    def __init__(self, c, scale_factor=2):
+        super().__init__()
+        self.conv = nn.Conv2d(c, c * (scale_factor ** 2), 3, padding=1)
+        self.ps = nn.PixelShuffle(scale_factor)
+        self.act = nn.SiLU()
+
+    def forward(self, x):
+        return self.act(self.ps(self.conv(x)))
+
+
+class EnhancedSPPF(nn.Module):
+    """增强版SPPF模块 - 专为小目标检测优化"""
+
+    def __init__(self, c1, c2, k=5, scale_factor=2):
+        super().__init__()
+        # 通道调整
+        c_ = max(c1 // 2, 16)
+
+        # 上采样分支 - 增强小目标特征
+        self.upsample = ESPCN_UpSample(c1, scale_factor)
+
+        # 多尺度池化分支
+        self.cv1 = Conv(c1, c_, 1, 1)
+
+        # 多尺度池化分支
+        self.m1 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.m2 = nn.AvgPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.m3 = nn.MaxPool2d(kernel_size=k + 4, stride=1, padding=(k + 4) // 2)
+
+        # 坐标注意力机制
+        self.attn = CoordAtt(c_ * 4)
+
+        # 输出卷积
+        self.cv2 = Conv(c_ * 4 * (scale_factor ** 2), c2, 1, 1)
+
+        # 残差连接
+        self.use_residual = c1 == c2
+        if self.use_residual:
+            self.shortcut = Conv(c1, c2, 1, 1)
+
+    def forward(self, x):
+        # 原始特征
+        identity = x
+
+        # 上采样增强小目标特征
+        upsampled = self.upsample(x)
+
+        # 多尺度特征提取
+        y = self.cv1(x)
+        y1 = y
+        y2 = self.m1(y)
+        y3 = self.m2(y)
+        y4 = self.m3(y)
+
+        # 特征拼接
+        y = torch.cat([y1, y2, y3, y4], 1)
+
+        # 应用坐标注意力
+        y = self.attn(y)
+
+        # 与上采样特征融合
+        y = torch.cat([y, upsampled], 1) if upsampled.size(2) == y.size(2) else y
+
+        # 输出处理
+        y = self.cv2(y)
+
+        # 残差连接
+        if self.use_residual:
+            return y + self.shortcut(identity)
+        return y
+
+
 class LightFSR(nn.Module):  # 轻量特征超分辨率模块
     def __init__(self, c, scale_factor=2):
         super().__init__()
