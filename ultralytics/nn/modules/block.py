@@ -5,6 +5,8 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
 from .transformer import TransformerBlock
@@ -170,22 +172,17 @@ class SPP(nn.Module):
 class DeformableConv2d(nn.Module):
     """纯PyTorch实现的可变形卷积，不依赖torchvision"""
 
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
-        self.padding = padding
-        self.stride = stride
         self.kernel_size = kernel_size
-
-        # 常规卷积
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=0, bias=bias)
-
-        # 偏移量生成器
-        self.offset_conv = nn.Conv2d(in_channels, 2 * kernel_size * kernel_size, kernel_size, stride, padding)
-        nn.init.constant_(self.offset_conv.weight, 0)
-        nn.init.constant_(self.offset_conv.bias, 0)
-
-        # 采样网格
-        self.register_buffer('grid', self._get_grid(kernel_size))
+        self.stride = stride
+        self.padding = padding
+        # 正确：通道数设为 2*kernel_size*kernel_size（3x3对应18）
+        offset_channels = 2 * kernel_size * kernel_size  # 关键修正点
+        self.offset_conv = Conv(in_channels, offset_channels, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.deform_conv = torchvision.ops.DeformConv2d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding
+        )
 
     def _get_grid(self, kernel_size):
         """生成基础采样网格"""
