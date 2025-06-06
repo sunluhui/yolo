@@ -58,7 +58,7 @@ from .block import (
     SCDown,
     TorchVision,
     SPPFCSPC,
-    A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, AdvancedCA_RFA_EnhancedSPPF, MSRFCA_SPPF,
+    A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, AdvancedCA_RFA_EnhancedSPPF,
     AdaptiveSPPF
 )
 from .conv import (
@@ -184,7 +184,6 @@ __all__ = (
     "DynamicSPPF",
     "CA_RFA_EnhancedSPPF",
     "AdvancedCA_RFA_EnhancedSPPF",
-    "MSRFCA_SPPF",
     "AdaptiveSPPF",
 )
 from .ela import ELA
