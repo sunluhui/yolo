@@ -172,16 +172,25 @@ class SPP(nn.Module):
 class DeformableConv2d(nn.Module):
     """纯PyTorch实现的可变形卷积，不依赖torchvision"""
 
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
         super().__init__()
-        self.kernel_size = kernel_size
-        self.stride = stride
         self.padding = padding
-        # 正确：通道数设为 2*kernel_size*kernel_size（3x3对应18）
-        offset_channels = 2 * kernel_size * kernel_size  # 关键修正点
-        self.offset_conv = Conv(in_channels, offset_channels, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.stride = stride
+
+        # 计算偏移量通道数
+        offset_channels = 2 * kernel_size * kernel_size
+
+        # 修改这里：将 kernel_size 改为 k
+        self.offset_conv = Conv(in_channels, offset_channels, k=kernel_size, stride=stride, padding=padding)
+
+        # 初始化偏移量权重为0
+        nn.init.constant_(self.offset_conv.conv.weight, 0)
+        if self.offset_conv.conv.bias is not None:
+            nn.init.constant_(self.offset_conv.conv.bias, 0)
+
+        # 使用可变形卷积
         self.deform_conv = torchvision.ops.DeformConv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias
         )
 
     def _get_grid(self, kernel_size):
