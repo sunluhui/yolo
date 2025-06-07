@@ -170,70 +170,83 @@ class SPP(nn.Module):
 
 
 class FocalModulation(nn.Module):
-    def __init__(self, dim, focal_window=3, focal_level=2, focal_factor=2, bias=True, proj_drop=0.,
-                 use_postln_in_modulation=False, normalize_modulator=False):
+    def __init__(self, c1, c2, focal_window=7, focal_level=2):
         super().__init__()
-        self.dim = dim
-        self.focal_window = focal_window
+        self.dim = c2
         self.focal_level = focal_level
-        self.focal_factor = focal_factor
-        self.use_postln_in_modulation = use_postln_in_modulation
-        self.normalize_modulator = normalize_modulator
 
-        self.f_linear = nn.Conv2d(dim, 2 * dim + (self.focal_level + 1), kernel_size=1, bias=bias)
-        self.h = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=bias)
-        self.act = nn.GELU()
-        self.proj = nn.Conv2d(dim, dim, kernel_size=1)
-        self.proj_drop = nn.Dropout(proj_drop)
+        # 确保focal_window是奇数，这样padding才能正确计算
+        if focal_window % 2 == 0:
+            focal_window += 1
 
-        self.focal_layers = nn.ModuleList()
-        self.kernel_sizes = []
-        for k in range(self.focal_level):
-            kernel_size = self.focal_factor * k + self.focal_window
-            self.focal_layers.append(
+        # 多尺度深度卷积层
+        self.focal_conv = nn.ModuleList()
+        for i in range(focal_level):
+            kernel_size = focal_window * (2 ** i)
+            # 确保kernel_size是奇数
+            if kernel_size % 2 == 0:
+                kernel_size += 1
+            padding = kernel_size // 2
+
+            self.focal_conv.append(
                 nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=kernel_size, stride=1,
-                              groups=dim, padding=kernel_size // 2, bias=False),
-                    nn.GELU(),
+                    nn.Conv2d(self.dim, self.dim, kernel_size,
+                              padding=padding, groups=self.dim, bias=False),
+                    nn.BatchNorm2d(self.dim),
+                    nn.GELU()
                 )
             )
-            self.kernel_sizes.append(kernel_size)
-        if self.use_postln_in_modulation:
-            self.ln = nn.LayerNorm(dim)
+
+        # 门控机制和投影层
+        self.gate = nn.Linear(self.dim, focal_level + 1)
+        self.proj = nn.Sequential(
+            nn.Conv2d(self.dim, self.dim, 1),
+            nn.BatchNorm2d(self.dim)
+        )
+
+        # 通道调整
+        self.channel_adjust = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
 
     def forward(self, x):
-        """
-        Args:
-            x: input features with shape of (B, H, W, C)
-        """
-        C = x.shape[1]
+        # 通道调整
+        x = self.channel_adjust(x)
+        B, C, H, W = x.shape
 
-        # pre linear projection
-        x = self.f_linear(x).contiguous()
-        q, ctx, gates = torch.split(x, (C, C, self.focal_level + 1), 1)
+        # 多尺度特征提取 - 确保所有特征图尺寸一致
+        ctx_list = []
+        for conv in self.focal_conv:
+            ctx = conv(x)
+            # 如果尺寸不一致，使用插值调整为相同尺寸
+            if ctx.shape[2:] != (H, W):
+                ctx = F.interpolate(ctx, size=(H, W), mode='bilinear', align_corners=False)
+            ctx_list.append(ctx)
 
-        # context aggregation
-        ctx_all = 0.0
-        for l in range(self.focal_level):
-            ctx = self.focal_layers[l](ctx)
-            ctx_all = ctx_all + ctx * gates[:, l:l + 1]
-        ctx_global = self.act(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
-        ctx_all = ctx_all + ctx_global * gates[:, self.focal_level:]
+        # 上下文聚合 - 使用安全的方式
+        ctx = torch.zeros_like(x)
+        for i, c in enumerate(ctx_list):
+            # 确保每个特征图尺寸相同
+            if c.shape[2:] != (H, W):
+                c = F.interpolate(c, size=(H, W), mode='bilinear', align_corners=False)
+            ctx += c
+        ctx = ctx / len(ctx_list)
 
-        # normalize context
-        if self.normalize_modulator:
-            ctx_all = ctx_all / (self.focal_level + 1)
+        # 门控机制
+        gate_scores = self.gate(x.mean([2, 3]))
+        gate = F.softmax(gate_scores, dim=1)
 
-        # focal modulation
-        x_out = q * self.h(ctx_all)
-        x_out = x_out.contiguous()
-        if self.use_postln_in_modulation:
-            x_out = self.ln(x_out)
+        # 特征调制
+        gate_weights = gate[:, 1:].view(B, self.focal_level, 1, 1, 1)
+        weighted_ctx = torch.zeros_like(x)
 
-        # post linear projection
-        x_out = self.proj(x_out)
-        x_out = self.proj_drop(x_out)
-        return x_out
+        for i in range(self.focal_level):
+            c = ctx_list[i]
+            # 再次确保尺寸一致
+            if c.shape[2:] != (H, W):
+                c = F.interpolate(c, size=(H, W), mode='bilinear', align_corners=False)
+            weighted_ctx += gate_weights[:, i] * c
+
+        # 投影并融合
+        return x + self.proj(weighted_ctx)
 
 
 class SmallObjectAmplifier(nn.Module):
