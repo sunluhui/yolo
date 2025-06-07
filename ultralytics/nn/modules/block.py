@@ -169,6 +169,29 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class FocalModulation(nn.Module):
+    def __init__(self, dim, focal_window=7, focal_level=2):
+        super().__init__()
+        self.focal_conv = nn.ModuleList()
+        for i in range(focal_level):
+            kernel_size = focal_window * (2 ** i)
+            self.focal_conv.append(
+                nn.Sequential(
+                    nn.Conv2d(dim, dim, kernel_size, padding=kernel_size // 2, groups=dim),
+                    nn.GELU()
+                )
+            )
+        self.gate = nn.Linear(dim, focal_level + 1)
+        self.proj = nn.Linear(dim, dim)
+
+    def forward(self, x):
+        ctx_list = [conv(x) for conv in self.focal_conv]
+        ctx = torch.stack(ctx_list, dim=0).mean(0)  # 多尺度上下文聚合
+        gate = self.gate(x.mean([2, 3])).softmax(1)
+        mod = (gate.unsqueeze(-1).unsqueeze(-1) * ctx)  # 门控加权
+        return self.proj(mod) + x  # 仿射变换注入
+
+
 class SmallObjectAmplifier(nn.Module):
     """针对小目标的特征增强模块"""
 
