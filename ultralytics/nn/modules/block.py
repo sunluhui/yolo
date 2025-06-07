@@ -175,11 +175,19 @@ class FocalModulation(nn.Module):
         self.dim = c2
         self.focal_level = focal_level
 
+        # 确保focal_window是奇数，这样padding才能正确计算
+        if focal_window % 2 == 0:
+            focal_window += 1
+
         # 多尺度深度卷积层
         self.focal_conv = nn.ModuleList()
         for i in range(focal_level):
             kernel_size = focal_window * (2 ** i)
+            # 确保kernel_size是奇数
+            if kernel_size % 2 == 0:
+                kernel_size += 1
             padding = kernel_size // 2
+
             self.focal_conv.append(
                 nn.Sequential(
                     nn.Conv2d(self.dim, self.dim, kernel_size,
@@ -204,17 +212,21 @@ class FocalModulation(nn.Module):
         x = self.channel_adjust(x)
         B, C, H, W = x.shape
 
-        # 多尺度特征提取 (使用固定步长的池化替代自适应池化)
+        # 多尺度特征提取 - 确保所有特征图尺寸一致
         ctx_list = []
         for conv in self.focal_conv:
             ctx = conv(x)
-            # 使用步长为1的池化确保输出尺寸与输入一致
-            ctx = F.avg_pool2d(ctx, kernel_size=1, stride=1)
+            # 如果尺寸不一致，使用插值调整为相同尺寸
+            if ctx.shape[2:] != (H, W):
+                ctx = F.interpolate(ctx, size=(H, W), mode='bilinear', align_corners=False)
             ctx_list.append(ctx)
 
-        # 上下文聚合 (使用平均池化替代堆叠)
+        # 上下文聚合 - 使用安全的方式
         ctx = torch.zeros_like(x)
-        for c in ctx_list:
+        for i, c in enumerate(ctx_list):
+            # 确保每个特征图尺寸相同
+            if c.shape[2:] != (H, W):
+                c = F.interpolate(c, size=(H, W), mode='bilinear', align_corners=False)
             ctx += c
         ctx = ctx / len(ctx_list)
 
@@ -227,7 +239,11 @@ class FocalModulation(nn.Module):
         weighted_ctx = torch.zeros_like(x)
 
         for i in range(self.focal_level):
-            weighted_ctx += gate_weights[:, i] * ctx_list[i]
+            c = ctx_list[i]
+            # 再次确保尺寸一致
+            if c.shape[2:] != (H, W):
+                c = F.interpolate(c, size=(H, W), mode='bilinear', align_corners=False)
+            weighted_ctx += gate_weights[:, i] * c
 
         # 投影并融合
         return x + self.proj(weighted_ctx)
