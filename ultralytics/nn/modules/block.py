@@ -178,7 +178,8 @@ class FocalModulation(nn.Module):
         focal_level: 多尺度层级数 (YAML中第三个参数)
         """
         super().__init__()
-        dim = c2  # 使用YAML指定的输出通道数
+        self.dim = c2
+        self.focal_level = focal_level
 
         # 多尺度深度卷积层
         self.focal_conv = nn.ModuleList()
@@ -187,17 +188,19 @@ class FocalModulation(nn.Module):
             padding = kernel_size // 2
             self.focal_conv.append(
                 nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size, padding=padding, groups=dim, bias=False),
-                    nn.BatchNorm2d(dim),
+                    nn.Conv2d(self.dim, self.dim, kernel_size,
+                              padding=padding, groups=self.dim, bias=False),
+                    nn.BatchNorm2d(self.dim),
                     nn.GELU()
                 )
             )
 
         # 门控机制和投影层
-        self.gate = nn.Linear(dim, focal_level + 1)
+        self.gate = nn.Linear(self.dim, focal_level + 1)
         self.proj = nn.Sequential(
-            nn.Conv2d(dim, dim, 1),
-            nn.BatchNorm2d(dim))
+            nn.Conv2d(self.dim, self.dim, 1),
+            nn.BatchNorm2d(self.dim)
+        )
 
         # 通道调整 (当输入输出通道数不同时)
         self.channel_adjust = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
@@ -205,20 +208,35 @@ class FocalModulation(nn.Module):
     def forward(self, x):
         # 通道调整
         x = self.channel_adjust(x)
+        B, C, H, W = x.shape
 
-        # 多尺度特征提取
-        ctx_list = [conv(x) for conv in self.focal_conv]
-        ctx = torch.stack(ctx_list, dim=0).mean(0)
+        # 多尺度特征提取 (确保所有特征图尺寸一致)
+        ctx_list = []
+        for conv in self.focal_conv:
+            # 使用自适应平均池化统一尺寸
+            ctx = conv(x)
+            ctx = F.adaptive_avg_pool2d(ctx, (H, W))
+            ctx_list.append(ctx)
+
+        # 上下文聚合 (使用平均池化替代堆叠)
+        ctx = torch.zeros_like(x)
+        for c in ctx_list:
+            ctx += c
+        ctx = ctx / len(ctx_list)
 
         # 门控机制
         gate_scores = self.gate(x.mean([2, 3]))
         gate = F.softmax(gate_scores, dim=1)
 
-        # 特征调制
-        mod = (gate.unsqueeze(-1).unsqueeze(-1) * ctx).sum(dim=1)
+        # 特征调制 (使用广播机制避免尺寸问题)
+        gate_weights = gate[:, 1:].view(B, self.focal_level, 1, 1, 1)  # [B, L, 1, 1, 1]
+        weighted_ctx = torch.zeros_like(x)
+
+        for i in range(self.focal_level):
+            weighted_ctx += gate_weights[:, i] * ctx_list[i]
 
         # 投影并融合
-        return x + self.proj(mod)
+        return x + self.proj(weighted_ctx)
 
 
 class SmallObjectAmplifier(nn.Module):
