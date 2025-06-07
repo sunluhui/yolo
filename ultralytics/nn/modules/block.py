@@ -170,26 +170,55 @@ class SPP(nn.Module):
 
 
 class FocalModulation(nn.Module):
-    def __init__(self, dim, focal_window=7, focal_level=2):
+    def __init__(self, c1, c2, focal_window=7, focal_level=2):
+        """
+        c1: 输入通道数 (自动传入)
+        c2: 输出通道数 (YAML中第一个参数)
+        focal_window: 基础窗口大小 (YAML中第二个参数)
+        focal_level: 多尺度层级数 (YAML中第三个参数)
+        """
         super().__init__()
+        dim = c2  # 使用YAML指定的输出通道数
+
+        # 多尺度深度卷积层
         self.focal_conv = nn.ModuleList()
         for i in range(focal_level):
             kernel_size = focal_window * (2 ** i)
+            padding = kernel_size // 2
             self.focal_conv.append(
                 nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size, padding=kernel_size // 2, groups=dim),
+                    nn.Conv2d(dim, dim, kernel_size, padding=padding, groups=dim, bias=False),
+                    nn.BatchNorm2d(dim),
                     nn.GELU()
                 )
             )
+
+        # 门控机制和投影层
         self.gate = nn.Linear(dim, focal_level + 1)
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Sequential(
+            nn.Conv2d(dim, dim, 1),
+            nn.BatchNorm2d(dim))
+
+        # 通道调整 (当输入输出通道数不同时)
+        self.channel_adjust = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
 
     def forward(self, x):
+        # 通道调整
+        x = self.channel_adjust(x)
+
+        # 多尺度特征提取
         ctx_list = [conv(x) for conv in self.focal_conv]
-        ctx = torch.stack(ctx_list, dim=0).mean(0)  # 多尺度上下文聚合
-        gate = self.gate(x.mean([2, 3])).softmax(1)
-        mod = (gate.unsqueeze(-1).unsqueeze(-1) * ctx)  # 门控加权
-        return self.proj(mod) + x  # 仿射变换注入
+        ctx = torch.stack(ctx_list, dim=0).mean(0)
+
+        # 门控机制
+        gate_scores = self.gate(x.mean([2, 3]))
+        gate = F.softmax(gate_scores, dim=1)
+
+        # 特征调制
+        mod = (gate.unsqueeze(-1).unsqueeze(-1) * ctx).sum(dim=1)
+
+        # 投影并融合
+        return x + self.proj(mod)
 
 
 class SmallObjectAmplifier(nn.Module):
