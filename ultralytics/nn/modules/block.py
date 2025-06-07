@@ -171,12 +171,6 @@ class SPP(nn.Module):
 
 class FocalModulation(nn.Module):
     def __init__(self, c1, c2, focal_window=7, focal_level=2):
-        """
-        c1: 输入通道数 (自动传入)
-        c2: 输出通道数 (YAML中第一个参数)
-        focal_window: 基础窗口大小 (YAML中第二个参数)
-        focal_level: 多尺度层级数 (YAML中第三个参数)
-        """
         super().__init__()
         self.dim = c2
         self.focal_level = focal_level
@@ -202,7 +196,7 @@ class FocalModulation(nn.Module):
             nn.BatchNorm2d(self.dim)
         )
 
-        # 通道调整 (当输入输出通道数不同时)
+        # 通道调整
         self.channel_adjust = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
 
     def forward(self, x):
@@ -210,12 +204,12 @@ class FocalModulation(nn.Module):
         x = self.channel_adjust(x)
         B, C, H, W = x.shape
 
-        # 多尺度特征提取 (确保所有特征图尺寸一致)
+        # 多尺度特征提取 (使用固定步长的池化替代自适应池化)
         ctx_list = []
         for conv in self.focal_conv:
-            # 使用自适应平均池化统一尺寸
             ctx = conv(x)
-            ctx = F.adaptive_avg_pool2d(ctx, (H, W))
+            # 使用步长为1的池化确保输出尺寸与输入一致
+            ctx = F.avg_pool2d(ctx, kernel_size=1, stride=1)
             ctx_list.append(ctx)
 
         # 上下文聚合 (使用平均池化替代堆叠)
@@ -228,8 +222,8 @@ class FocalModulation(nn.Module):
         gate_scores = self.gate(x.mean([2, 3]))
         gate = F.softmax(gate_scores, dim=1)
 
-        # 特征调制 (使用广播机制避免尺寸问题)
-        gate_weights = gate[:, 1:].view(B, self.focal_level, 1, 1, 1)  # [B, L, 1, 1, 1]
+        # 特征调制
+        gate_weights = gate[:, 1:].view(B, self.focal_level, 1, 1, 1)
         weighted_ctx = torch.zeros_like(x)
 
         for i in range(self.focal_level):
