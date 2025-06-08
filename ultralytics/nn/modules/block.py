@@ -1467,6 +1467,97 @@ class SPPF_MultiScale(nn.Module):
         return self.cv2(torch.cat(features, dim=1))
 
 
+class DroneSPPF(nn.Module):
+    """Drone-Optimized SPPF for UAV Small Object Detection"""
+
+    def __init__(self, c1, c2, k=3, dilation_rates=[1, 2, 3], use_attention=True):
+        """
+        Args:
+            c1: 输入通道数
+            c2: 输出通道数
+            k: 基础池化尺寸 (推荐3-5)
+            dilation_rates: 空洞卷积扩张率
+            use_attention: 是否使用无人机专用注意力
+        """
+        super().__init__()
+        # 降维层 (保留更多细节)
+        self.cv1 = nn.Sequential(
+            nn.Conv2d(c1, c1 // 2, 1, bias=False),
+            nn.BatchNorm2d(c1 // 2),
+            nn.SiLU(),
+            nn.Conv2d(c1 // 2, c1 // 2, 3, padding=1, bias=False),  # 增加感受野
+            nn.BatchNorm2d(c1 // 2),
+            nn.SiLU()
+        )
+
+        # 多尺度池化分支 (不同尺寸的池化核)
+        self.pool_layers = nn.ModuleList([
+            nn.MaxPool2d(kernel_size=ks, stride=1, padding=ks // 2)
+            for ks in [k, k + 2, k + 4]  # 3种不同尺寸
+        ])
+
+        # 多尺度空洞卷积分支 (增强小目标特征)
+        self.dilated_convs = nn.ModuleList()
+        for rate in dilation_rates:
+            self.dilated_convs.append(
+                nn.Sequential(
+                    nn.Conv2d(c1 // 2, c1 // 4, 3,
+                              padding=rate, dilation=rate, bias=False),
+                    nn.BatchNorm2d(c1 // 4),
+                    nn.SiLU()
+                )
+            )
+
+        # 特征融合层
+        fuse_in = (c1 // 2) * 4 + (c1 // 4) * len(dilation_rates)
+        self.cv2 = nn.Sequential(
+            nn.Conv2d(fuse_in, c2, 1, bias=False),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+        # 无人机专用注意力机制
+        if use_attention:
+            self.attention = nn.Sequential(
+                # 通道注意力
+                nn.AdaptiveAvgPool2d(1),
+                nn.Conv2d(c2, max(c2 // 16, 4), 1),
+                nn.SiLU(),
+                nn.Conv2d(max(c2 // 16, 4), c2, 1),
+                nn.Sigmoid(),
+                # 空间注意力 (简化)
+                nn.Conv2d(c2, 1, kernel_size=3, padding=1),
+                nn.Sigmoid()
+            )
+        else:
+            self.attention = None
+
+    def forward(self, x):
+        # 第一步: 特征提取与降维
+        x = self.cv1(x)
+
+        # 多尺度池化分支
+        pool_features = [x]
+        for pool in self.pool_layers:
+            pool_features.append(pool(pool_features[-1]))
+
+        # 多尺度空洞卷积分支
+        dilated_features = [conv(x) for conv in self.dilated_convs]
+
+        # 特征拼接 (池化特征 + 空洞卷积特征)
+        all_features = torch.cat(pool_features + dilated_features, dim=1)
+
+        # 特征融合
+        out = self.cv2(all_features)
+
+        # 应用无人机专用注意力
+        if self.attention is not None:
+            attn = self.attention(out)
+            out = out * attn
+
+        return out
+
+
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
