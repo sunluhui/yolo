@@ -210,13 +210,20 @@ class SPPFA(nn.Module):
             nn.SiLU()
         )
 
-        # 特征融合层
+        # 修复1: 正确计算融合层的输入通道数
+        # 分支数量 = 空洞卷积分支数 + 1 (全局分支)
+        num_branches = len(dilation_rates) + 1
+        # 每个分支输出 hidden_channels 个通道
+        fuse_in_channels = hidden_channels * num_branches
+
+        # 特征融合层 (修复2: 使用计算好的通道数)
         self.fusion = nn.Sequential(
-            nn.Conv2d(hidden_channels * (len(dilation_rates) + hidden_channels, hidden_channels, 1),
-                      nn.BatchNorm2d(hidden_channels),
-                      nn.SiLU(),
-                      nn.Conv2d(hidden_channels, c2, 1)
-                      ))
+            nn.Conv2d(fuse_in_channels, hidden_channels, 1),
+            nn.BatchNorm2d(hidden_channels),
+            nn.SiLU(),
+            nn.Conv2d(hidden_channels, c2, 1),
+            nn.BatchNorm2d(c2)
+        )
 
         # 注意力机制 (可选)
         if use_attention:
