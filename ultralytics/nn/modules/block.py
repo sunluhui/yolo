@@ -174,14 +174,21 @@ class FocalModulation(nn.Module):
                  focal_window=5, *dilation_args, use_ca=True):
         super().__init__()
 
-        # 处理 dilation_rates 参数 (保持不变)
-        if dilation_args and isinstance(dilation_args[0], (list, tuple)):
-            dilation_rates = dilation_args[0]
-        elif dilation_args:
-            dilation_rates = list(dilation_args)
+        # 处理 dilation_rates 参数 - 确保是整数列表
+        if dilation_args:
+            # 如果第一个参数是列表/元组，直接使用它
+            if isinstance(dilation_args[0], (list, tuple)):
+                dilation_rates = list(dilation_args[0])
+            # 否则将所有参数作为列表
+            else:
+                dilation_rates = list(dilation_args)
         else:
-            dilation_rates = [1, 2, 4]
+            dilation_rates = [1, 2, 4]  # 默认值
 
+        # 确保dilation_rates是整数列表
+        dilation_rates = [int(d) for d in dilation_rates]
+
+        # 确保有足够的dilation_rates
         if len(dilation_rates) < focal_level:
             dilation_rates = dilation_rates * (focal_level // len(dilation_rates) + 1)
             dilation_rates = dilation_rates[:focal_level]
@@ -193,7 +200,7 @@ class FocalModulation(nn.Module):
         self.dilation_rates = dilation_rates
         self.use_ca = use_ca
 
-        # 投影层 (保持不变)
+        # 投影层
         self.projector = nn.Sequential(
             nn.Conv2d(in_channels, in_channels * 2, kernel_size=1),
             nn.BatchNorm2d(in_channels * 2),
@@ -203,24 +210,25 @@ class FocalModulation(nn.Module):
             nn.GELU()
         )
 
-        # 修复：正确的padding计算
+        # 多尺度上下文聚合 - 修复padding计算
         self.aggregators = nn.ModuleList()
         for k in range(focal_level):
-            kernel_size_val = focal_window + 2 * k  # 实际卷积核大小
+            # 确保获取单个dilation值
+            dilation_val = self.dilation_rates[k]
+            if not isinstance(dilation_val, int):
+                dilation_val = int(dilation_val)
 
-            # 正确的padding计算公式
-            dilation_val = dilation_rates[k]
+            kernel_size_val = self.focal_window + 2 * k
+
+            # 正确的padding计算
             padding_val = dilation_val * (kernel_size_val - 1) // 2
-
-            # 确保padding是整数
-            if not isinstance(padding_val, int):
-                padding_val = int(padding_val)
+            padding_val = int(padding_val)  # 确保是整数
 
             self.aggregators.append(
                 nn.Sequential(
                     nn.Conv2d(in_channels, in_channels,
                               kernel_size=kernel_size_val,
-                              padding=padding_val,  # 使用计算出的padding
+                              padding=padding_val,
                               dilation=dilation_val,
                               groups=in_channels,
                               bias=False),
@@ -229,7 +237,7 @@ class FocalModulation(nn.Module):
                 )
             )
 
-        # 门控机制 (保持不变)
+        # 门控机制
         self.gate = nn.Sequential(
             nn.Conv2d(in_channels, in_channels // 4, kernel_size=1),
             nn.ReLU(),
@@ -237,11 +245,11 @@ class FocalModulation(nn.Module):
             nn.Sigmoid()
         )
 
-        # 坐标注意力 (保持不变)
+        # 坐标注意力
         if use_ca:
             self.ca = CoordinateAttention(in_channels)
 
-        # 调制器 (保持不变)
+        # 调制器
         reduced_channels = max(in_channels // reduction, 32)
         self.modulator = nn.Sequential(
             nn.Conv2d(in_channels * focal_level, reduced_channels, kernel_size=1),
@@ -250,7 +258,7 @@ class FocalModulation(nn.Module):
             nn.LayerNorm([in_channels, 1, 1])
         )
 
-        # 输出投影 (保持不变)
+        # 输出投影
         self.output_proj = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(in_channels)
