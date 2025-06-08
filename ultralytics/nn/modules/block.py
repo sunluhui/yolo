@@ -170,83 +170,155 @@ class SPP(nn.Module):
 
 
 class FocalModulation(nn.Module):
-    def __init__(self, c1, c2, focal_window=7, focal_level=2):
+    def __init__(self, in_channels, kernel_size=3, reduction=2, focal_level=4,
+                 focal_window=5, dilation_rates=[1, 2, 4], use_ca=True):
+        """
+        针对无人机小目标检测优化的Focal Modulation模块
+
+        参数:
+            in_channels (int): 输入通道数
+            kernel_size (int): 基础卷积核大小 (默认: 3)
+            reduction (int): 中间层通道缩减比例 (更小值保留更多信息，默认: 2)
+            focal_level (int): 上下文聚合层级数 (增加层级捕获多尺度特征，默认: 4)
+            focal_window (int): 基础窗口大小 (增大窗口捕获更大上下文，默认: 5)
+            dilation_rates (list): 空洞卷积扩张率 (扩大感受野不增加计算量，默认: [1, 2, 4])
+            use_ca (bool): 是否使用坐标注意力 (增强空间定位能力，默认: True)
+        """
         super().__init__()
-        self.dim = c2
+        self.in_channels = in_channels
+        self.reduction = reduction
         self.focal_level = focal_level
+        self.focal_window = focal_window
+        self.dilation_rates = dilation_rates
+        self.use_ca = use_ca
 
-        # 确保focal_window是奇数，这样padding才能正确计算
-        if focal_window % 2 == 0:
-            focal_window += 1
+        # 增强的特征投影层
+        self.projector = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels * 2, kernel_size=1),
+            nn.BatchNorm2d(in_channels * 2),
+            nn.GELU(),
+            nn.Conv2d(in_channels * 2, in_channels * 2, kernel_size=3, padding=1, groups=in_channels),
+            nn.GELU()
+        )
 
-        # 多尺度深度卷积层
-        self.focal_conv = nn.ModuleList()
-        for i in range(focal_level):
-            kernel_size = focal_window * (2 ** i)
-            # 确保kernel_size是奇数
-            if kernel_size % 2 == 0:
-                kernel_size += 1
-            padding = kernel_size // 2
+        # 多尺度空洞上下文聚合
+        self.aggregators = nn.ModuleList()
+        for k in range(focal_level):
+            kernel_size = focal_window + 2 * k  # 渐进式增大核尺寸
+            dilation = dilation_rates[k % len(dilation_rates)]
+            padding = dilation * (kernel_size // 2)
 
-            self.focal_conv.append(
+            self.aggregators.append(
                 nn.Sequential(
-                    nn.Conv2d(self.dim, self.dim, kernel_size,
-                              padding=padding, groups=self.dim, bias=False),
-                    nn.BatchNorm2d(self.dim),
+                    nn.Conv2d(in_channels, in_channels,
+                              kernel_size=kernel_size,
+                              padding=padding,
+                              dilation=dilation,
+                              groups=in_channels,
+                              bias=False),
+                    nn.BatchNorm2d(in_channels),
                     nn.GELU()
                 )
             )
 
-        # 门控机制和投影层
-        self.gate = nn.Linear(self.dim, focal_level + 1)
-        self.proj = nn.Sequential(
-            nn.Conv2d(self.dim, self.dim, 1),
-            nn.BatchNorm2d(self.dim)
+        # 增强的空间注意力门控
+        self.gate = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels // 4, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels // 4, 1, kernel_size=1),
+            nn.Sigmoid()
         )
 
-        # 通道调整
-        self.channel_adjust = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
+        # 坐标注意力机制 (可选)
+        if use_ca:
+            self.ca = CoordinateAttention(in_channels)
+
+        # 高效调制器
+        reduced_channels = max(in_channels // reduction, 32)
+        self.modulator = nn.Sequential(
+            nn.Conv2d(in_channels * focal_level, reduced_channels, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(reduced_channels, in_channels, kernel_size=1),
+            nn.LayerNorm([in_channels, 1, 1])
+        )
+
+        # 输出投影层
+        self.output_proj = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(in_channels)
+        )
 
     def forward(self, x):
-        # 通道调整
-        x = self.channel_adjust(x)
-        B, C, H, W = x.shape
+        # 保存残差连接
+        residual = x
 
-        # 多尺度特征提取 - 确保所有特征图尺寸一致
-        ctx_list = []
-        for conv in self.focal_conv:
-            ctx = conv(x)
-            # 如果尺寸不一致，使用插值调整为相同尺寸
-            if ctx.shape[2:] != (H, W):
-                ctx = F.interpolate(ctx, size=(H, W), mode='bilinear', align_corners=False)
-            ctx_list.append(ctx)
+        # 特征投影
+        proj = self.projector(x)
+        query, context = proj.chunk(2, dim=1)
 
-        # 上下文聚合 - 使用安全的方式
-        ctx = torch.zeros_like(x)
-        for i, c in enumerate(ctx_list):
-            # 确保每个特征图尺寸相同
-            if c.shape[2:] != (H, W):
-                c = F.interpolate(c, size=(H, W), mode='bilinear', align_corners=False)
-            ctx += c
-        ctx = ctx / len(ctx_list)
+        # 多尺度上下文聚合
+        context_layers = []
+        for agg in self.aggregators:
+            ctx = agg(context)
+            if self.use_ca:
+                ctx = self.ca(ctx)  # 应用坐标注意力
+            context_layers.append(ctx)
 
-        # 门控机制
-        gate_scores = self.gate(x.mean([2, 3]))
-        gate = F.softmax(gate_scores, dim=1)
+        # 拼接多尺度特征
+        context_all = torch.cat(context_layers, dim=1)
 
-        # 特征调制
-        gate_weights = gate[:, 1:].view(B, self.focal_level, 1, 1, 1)
-        weighted_ctx = torch.zeros_like(x)
+        # 调制特征
+        modulated = self.modulator(context_all) * query
 
-        for i in range(self.focal_level):
-            c = ctx_list[i]
-            # 再次确保尺寸一致
-            if c.shape[2:] != (H, W):
-                c = F.interpolate(c, size=(H, W), mode='bilinear', align_corners=False)
-            weighted_ctx += gate_weights[:, i] * c
+        # 空间门控
+        gate = self.gate(x)
+        modulated = modulated * gate
 
-        # 投影并融合
-        return x + self.proj(weighted_ctx)
+        # 输出投影 + 残差连接
+        output = self.output_proj(modulated) + residual
+        return output
+
+
+class CoordinateAttention(nn.Module):
+    """坐标注意力机制 - 特别适合小目标定位"""
+
+    def __init__(self, in_channels, reduction=16):
+        super().__init__()
+        reduced_channels = max(in_channels // reduction, 8)
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        self.conv1 = nn.Conv2d(in_channels, reduced_channels, kernel_size=1)
+        self.bn1 = nn.BatchNorm2d(reduced_channels)
+        self.act = nn.ReLU()
+
+        self.conv_h = nn.Conv2d(reduced_channels, in_channels, kernel_size=1)
+        self.conv_w = nn.Conv2d(reduced_channels, in_channels, kernel_size=1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        identity = x
+        n, c, h, w = x.size()
+
+        # 高度方向注意力
+        x_h = self.pool_h(x)
+        x_w = self.pool_w(x).permute(0, 1, 3, 2)
+
+        # 特征融合
+        y = torch.cat([x_h, x_w], dim=2)
+        y = self.conv1(y)
+        y = self.bn1(y)
+        y = self.act(y)
+
+        # 分离高度和宽度注意力
+        x_h, x_w = torch.split(y, [h, w], dim=2)
+        x_w = x_w.permute(0, 1, 3, 2)
+
+        # 生成注意力图
+        a_h = self.sigmoid(self.conv_h(x_h))
+        a_w = self.sigmoid(self.conv_w(x_w))
+
+        return identity * a_h * a_w
 
 
 class SmallObjectAmplifier(nn.Module):
