@@ -59,7 +59,7 @@ from .block import (
     TorchVision,
     SPPFCSPC,
     A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, AdvancedCA_RFA_EnhancedSPPF,
-    AdaptiveSPPF, FocalModulation
+    AdaptiveSPPF, FocalModulation, SPPFA
 )
 from .conv import (
     CBAM,
@@ -186,6 +186,7 @@ __all__ = (
     "AdvancedCA_RFA_EnhancedSPPF",
     "AdaptiveSPPF",
     "FocalModulation",
+    "SPPFA",
 )
 from .ela import ELA
 from .ms_cam import MS_CAM

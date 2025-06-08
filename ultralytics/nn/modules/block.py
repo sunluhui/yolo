@@ -169,6 +169,96 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class SPPFA(nn.Module):
+    """SPPFA: Spatial Pyramid Pooling with Feature Aggregation for Small Object Detection"""
+
+    def __init__(self, c1, c2=None, k=3, e=0.75, dilation_rates=[1, 2, 3, 5], use_attention=True):
+        """
+        Args:
+            c1: 输入通道数
+            c2: 输出通道数 (默认 c1)
+            k: 基础卷积核尺寸 (默认 3)
+            e: 扩展率 (控制中间通道数)
+            dilation_rates: 空洞卷积的扩张率 (多尺度特征提取)
+            use_attention: 是否使用注意力机制
+        """
+        super().__init__()
+        c2 = c2 or c1  # 输出通道数默认等于输入通道数
+        self.c1 = c1
+        self.c2 = c2
+        hidden_channels = int(c1 * e)  # 中间通道数
+        self.dilation_rates = dilation_rates
+        self.use_attention = use_attention
+
+        # 多尺度空洞卷积分支
+        self.dilated_convs = nn.ModuleList()
+        for rate in dilation_rates:
+            padding = rate * (k - 1) // 2  # 保持输出尺寸不变
+            self.dilated_convs.append(
+                nn.Sequential(
+                    nn.Conv2d(c1, hidden_channels, kernel_size=k,
+                              padding=padding, dilation=rate, bias=False),
+                    nn.BatchNorm2d(hidden_channels),
+                    nn.SiLU()
+                )
+            )
+
+        # 全局上下文分支
+        self.global_branch = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(c1, hidden_channels, 1),
+            nn.SiLU()
+        )
+
+        # 特征融合层
+        self.fusion = nn.Sequential(
+            nn.Conv2d(hidden_channels * (len(dilation_rates) + hidden_channels, hidden_channels, 1),
+                      nn.BatchNorm2d(hidden_channels),
+                      nn.SiLU(),
+                      nn.Conv2d(hidden_channels, c2, 1)
+                      ))
+
+        # 注意力机制 (可选)
+        if use_attention:
+            self.attention = nn.Sequential(
+                nn.Conv2d(c2, c2 // 4, 1),
+                nn.SiLU(),
+                nn.Conv2d(c2 // 4, c2, 1),
+                nn.Sigmoid()
+            )
+
+        # 残差连接
+        self.residual = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
+
+    def forward(self, x):
+        # 原始输入特征
+        identity = x
+
+        # 多尺度特征提取
+        features = []
+        for conv in self.dilated_convs:
+            features.append(conv(x))
+
+        # 全局上下文
+        global_feat = self.global_branch(x)
+        global_feat = F.interpolate(global_feat, size=x.shape[2:], mode='nearest')
+        features.append(global_feat)
+
+        # 特征拼接
+        x_cat = torch.cat(features, dim=1)
+
+        # 特征融合
+        x_out = self.fusion(x_cat)
+
+        # 应用注意力机制
+        if self.use_attention:
+            attn = self.attention(x_out)
+            x_out = x_out * attn
+
+        # 残差连接
+        return self.residual(identity) + x_out
+
+
 class FocalModulation(nn.Module):
     def __init__(self, in_channels, kernel_size=3, reduction=2, focal_level=4,
                  focal_window=5, *dilation_args, use_ca=True):
