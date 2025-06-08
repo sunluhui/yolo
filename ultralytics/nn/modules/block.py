@@ -169,6 +169,150 @@ class SPP(nn.Module):
         return self.cv2(torch.cat([x] + [m(x) for m in self.m], 1))
 
 
+class SPPF_DC(nn.Module):
+    """SPPF with Dilated Convolutions for small objects"""
+
+    def __init__(self, c1, c2=None, k=5, dilation_rates=[1, 2, 3, 5]):
+        super().__init__()
+        c2 = c2 or c1
+        hidden_c = c1 // 2  # 减少通道数以降低计算量
+
+        # 多尺度空洞卷积分支
+        self.branches = nn.ModuleList()
+        for rate in dilation_rates:
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(c1, hidden_c, kernel_size=k,
+                              padding=rate * (k - 1) // 2, dilation=rate, bias=False),
+                    nn.BatchNorm2d(hidden_c),
+                    nn.SiLU()
+                )
+            )
+
+        # 原始最大池化分支
+        self.maxpool = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+        # 特征融合
+        self.fusion = nn.Sequential(
+            nn.Conv2d(c1 + hidden_c * len(dilation_rates), c2, 1, bias=False),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+    def forward(self, x):
+        x0 = x
+        # 原始SPPF分支
+        x1 = self.maxpool(x)
+        x2 = self.maxpool(x1)
+        x3 = self.maxpool(x2)
+        sppf_out = torch.cat([x, x1, x2, x3], 1)
+
+        # 多尺度空洞卷积分支
+        dc_outs = [branch(x) for branch in self.branches]
+
+        # 融合特征
+        all_features = torch.cat([sppf_out] + dc_outs, dim=1)
+        return self.fusion(all_features)
+
+
+class SPPF_Att(nn.Module):
+    """SPPF with Attention Mechanism"""
+
+    def __init__(self, c1, c2=None, k=5, reduction_ratio=8):
+        super().__init__()
+        c2 = c2 or c1
+
+        # 原始SPPF分支
+        self.maxpool1 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.maxpool2 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.maxpool3 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+        # 通道注意力
+        self.channel_att = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(4 * c1, max(4 * c1 // reduction_ratio, 4), 1),
+            nn.SiLU(),
+            nn.Conv2d(max(4 * c1 // reduction_ratio, 4), 4 * c1, 1),
+            nn.Sigmoid()
+        )
+
+        # 空间注意力
+        self.spatial_att = nn.Sequential(
+            nn.Conv2d(4, 1, kernel_size=7, padding=3),
+            nn.Sigmoid()
+        )
+
+        # 输出转换
+        self.conv = nn.Conv2d(4 * c1, c2, 1, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU()
+
+    def forward(self, x):
+        # 原始SPPF处理
+        x1 = self.maxpool1(x)
+        x2 = self.maxpool2(x1)
+        x3 = self.maxpool3(x2)
+        sppf_out = torch.cat([x, x1, x2, x3], 1)
+
+        # 通道注意力
+        channel_att = self.channel_att(sppf_out)
+        channel_out = sppf_out * channel_att
+
+        # 空间注意力
+        spatial_avg = torch.mean(channel_out, dim=1, keepdim=True)
+        spatial_max, _ = torch.max(channel_out, dim=1, keepdim=True)
+        spatial_concat = torch.cat([spatial_avg, spatial_max], dim=1)
+        spatial_att = self.spatial_att(spatial_concat)
+        att_out = channel_out * spatial_att
+
+        # 输出
+        return self.act(self.bn(self.conv(att_out)))
+
+
+class SPPF_GAP(nn.Module):
+    """SPPF with Global Adaptive Pooling"""
+
+    def __init__(self, c1, c2=None, k=5):
+        super().__init__()
+        c2 = c2 or c1
+
+        # 原始SPPF分支
+        self.maxpool1 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.maxpool2 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+        self.maxpool3 = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+        # 全局上下文分支
+        self.global_branch = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(c1, c1 // 4, 1),
+            nn.SiLU(),
+            nn.Conv2d(c1 // 4, c1, 1),
+            nn.Sigmoid()
+        )
+
+        # 特征融合
+        self.fusion = nn.Sequential(
+            nn.Conv2d(4 * c1 + c1, c2, 1, bias=False),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+    def forward(self, x):
+        # 原始SPPF处理
+        x1 = self.maxpool1(x)
+        x2 = self.maxpool2(x1)
+        x3 = self.maxpool3(x2)
+        sppf_out = torch.cat([x, x1, x2, x3], 1)
+
+        # 全局上下文
+        global_att = self.global_branch(x)
+        global_feat = x * global_att
+
+        # 特征融合
+        all_features = torch.cat([sppf_out, global_feat], dim=1)
+        return self.fusion(all_features)
+
+
 class SPPFA(nn.Module):
     """SPPFA: Spatial Pyramid Pooling with Feature Aggregation for Small Object Detection"""
 
