@@ -1429,6 +1429,44 @@ class DynamicSPPF(nn.Module):
         return identity + self.alpha * x
 
 
+class SPPF_MultiScale(nn.Module):
+    """多尺度SPPF模块 - 使用不同大小的池化核增强特征提取能力"""
+
+    def __init__(self, c1, c2, pool_sizes=(3, 5, 7)):
+        """
+        Args:
+            c1: 输入通道数
+            c2: 输出通道数
+            pool_sizes: 池化核尺寸列表 (默认: 3, 5, 7)
+        """
+        super().__init__()
+        c_ = c1 // 2  # 隐藏层通道数
+
+        # 1x1卷积降维
+        self.cv1 = Conv(c1, c_, 1, 1)
+
+        # 多尺度池化层
+        self.pool_layers = nn.ModuleList([
+            nn.MaxPool2d(kernel_size=size, stride=1, padding=size // 2)
+            for size in pool_sizes
+        ])
+
+        # 1x1卷积升维
+        self.cv2 = Conv(c_ * (len(pool_sizes) + 1), c2, 1, 1)
+
+    def forward(self, x):
+        """前向传播: 应用多尺度池化并拼接特征"""
+        x = self.cv1(x)  # 降维
+        features = [x]  # 原始特征
+
+        # 应用不同尺度的池化
+        for pool in self.pool_layers:
+            features.append(pool(x))
+
+        # 拼接所有特征并升维
+        return self.cv2(torch.cat(features, dim=1))
+
+
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
