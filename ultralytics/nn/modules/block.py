@@ -171,20 +171,22 @@ class SPP(nn.Module):
 
 class FocalModulation(nn.Module):
     def __init__(self, in_channels, kernel_size=3, reduction=2, focal_level=4,
-                 focal_window=5, dilation_rates=[1, 2, 4], use_ca=True):
-        """
-        针对无人机小目标检测优化的Focal Modulation模块
-
-        参数:
-            in_channels (int): 输入通道数
-            kernel_size (int): 基础卷积核大小 (默认: 3)
-            reduction (int): 中间层通道缩减比例 (更小值保留更多信息，默认: 2)
-            focal_level (int): 上下文聚合层级数 (增加层级捕获多尺度特征，默认: 4)
-            focal_window (int): 基础窗口大小 (增大窗口捕获更大上下文，默认: 5)
-            dilation_rates (list): 空洞卷积扩张率 (扩大感受野不增加计算量，默认: [1, 2, 4])
-            use_ca (bool): 是否使用坐标注意力 (增强空间定位能力，默认: True)
-        """
+                 focal_window=5, *dilation_args, use_ca=True):
         super().__init__()
+
+        # 处理 dilation_rates 参数
+        if dilation_args and isinstance(dilation_args[0], (list, tuple)):
+            dilation_rates = dilation_args[0]
+        elif dilation_args:
+            dilation_rates = list(dilation_args)
+        else:
+            dilation_rates = [1, 2, 4]
+
+        # 确保有足够的dilation_rates
+        if len(dilation_rates) < focal_level:
+            dilation_rates = dilation_rates * (focal_level // len(dilation_rates) + 1)
+            dilation_rates = dilation_rates[:focal_level]
+
         self.in_channels = in_channels
         self.reduction = reduction
         self.focal_level = focal_level
@@ -192,20 +194,21 @@ class FocalModulation(nn.Module):
         self.dilation_rates = dilation_rates
         self.use_ca = use_ca
 
-        # 增强的特征投影层
+        # 投影层
         self.projector = nn.Sequential(
             nn.Conv2d(in_channels, in_channels * 2, kernel_size=1),
             nn.BatchNorm2d(in_channels * 2),
             nn.GELU(),
-            nn.Conv2d(in_channels * 2, in_channels * 2, kernel_size=3, padding=1, groups=in_channels),
+            nn.Conv2d(in_channels * 2, in_channels * 2, kernel_size=3,
+                      padding=1, groups=in_channels),
             nn.GELU()
         )
 
-        # 多尺度空洞上下文聚合
+        # 多尺度上下文聚合
         self.aggregators = nn.ModuleList()
         for k in range(focal_level):
-            kernel_size = focal_window + 2 * k  # 渐进式增大核尺寸
-            dilation = dilation_rates[k % len(dilation_rates)]
+            kernel_size = self.focal_window + 2 * k
+            dilation = self.dilation_rates[k]
             padding = dilation * (kernel_size // 2)
 
             self.aggregators.append(
@@ -221,7 +224,7 @@ class FocalModulation(nn.Module):
                 )
             )
 
-        # 增强的空间注意力门控
+        # 门控机制
         self.gate = nn.Sequential(
             nn.Conv2d(in_channels, in_channels // 4, kernel_size=1),
             nn.ReLU(),
@@ -229,11 +232,11 @@ class FocalModulation(nn.Module):
             nn.Sigmoid()
         )
 
-        # 坐标注意力机制 (可选)
+        # 坐标注意力
         if use_ca:
             self.ca = CoordinateAttention(in_channels)
 
-        # 高效调制器
+        # 调制器
         reduced_channels = max(in_channels // reduction, 32)
         self.modulator = nn.Sequential(
             nn.Conv2d(in_channels * focal_level, reduced_channels, kernel_size=1),
@@ -242,7 +245,7 @@ class FocalModulation(nn.Module):
             nn.LayerNorm([in_channels, 1, 1])
         )
 
-        # 输出投影层
+        # 输出投影
         self.output_proj = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(in_channels)
