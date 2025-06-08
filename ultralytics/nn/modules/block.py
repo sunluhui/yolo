@@ -174,22 +174,36 @@ class FocalModulation(nn.Module):
                  focal_window=5, *dilation_args, use_ca=True):
         super().__init__()
 
-        # 处理 dilation_rates 参数 - 确保是整数列表
-        if dilation_args:
-            # 如果第一个参数是列表/元组，直接使用它
-            if isinstance(dilation_args[0], (list, tuple)):
-                dilation_rates = list(dilation_args[0])
-            # 否则将所有参数作为列表
-            else:
-                dilation_rates = list(dilation_args)
-        else:
-            dilation_rates = [1, 2, 4]  # 默认值
+        # 更健壮的处理 dilation_rates 参数
+        dilation_rates = []
 
-        # 确保dilation_rates是整数列表
-        dilation_rates = [int(d) for d in dilation_rates]
+        # 处理所有 dilation 参数
+        for arg in dilation_args:
+            if isinstance(arg, (list, tuple)):
+                # 展平嵌套列表
+                for item in arg:
+                    if isinstance(item, (list, tuple)):
+                        dilation_rates.extend(item)
+                    else:
+                        dilation_rates.append(item)
+            else:
+                dilation_rates.append(arg)
+
+        # 如果没有提供参数，使用默认值
+        if not dilation_rates:
+            dilation_rates = [1, 2, 4]
+
+        # 确保所有元素都是整数
+        try:
+            dilation_rates = [int(d) for d in dilation_rates]
+        except (TypeError, ValueError):
+            # 如果转换失败，使用默认值
+            print(f"Warning: Invalid dilation_rates {dilation_rates}, using default [1,2,4]")
+            dilation_rates = [1, 2, 4]
 
         # 确保有足够的dilation_rates
         if len(dilation_rates) < focal_level:
+            # 重复列表直到满足长度要求
             dilation_rates = dilation_rates * (focal_level // len(dilation_rates) + 1)
             dilation_rates = dilation_rates[:focal_level]
 
@@ -210,20 +224,20 @@ class FocalModulation(nn.Module):
             nn.GELU()
         )
 
-        # 多尺度上下文聚合 - 修复padding计算
+        # 多尺度上下文聚合
         self.aggregators = nn.ModuleList()
         for k in range(focal_level):
-            # 确保获取单个dilation值
+            # 获取当前层级的dilation值
             dilation_val = self.dilation_rates[k]
-            if not isinstance(dilation_val, int):
-                dilation_val = int(dilation_val)
 
+            # 计算当前层级的卷积核大小
             kernel_size_val = self.focal_window + 2 * k
 
             # 正确的padding计算
             padding_val = dilation_val * (kernel_size_val - 1) // 2
             padding_val = int(padding_val)  # 确保是整数
 
+            # 添加聚合层
             self.aggregators.append(
                 nn.Sequential(
                     nn.Conv2d(in_channels, in_channels,
