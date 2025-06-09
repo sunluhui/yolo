@@ -736,51 +736,6 @@ class MultiModalFusion(nn.Module):
         return v_weight * vis_out + i_weight * ir_out
 
 
-class DynamicRFAtt(nn.Module):
-    """自适应选择最佳感受野的注意力机制"""
-
-    def __init__(self, in_channels, kernels=[1, 3, 5, 7]):
-        super().__init__()
-        self.branches = nn.ModuleList()
-        self.kernels = kernels
-
-        # 创建不同感受野的分支
-        for k in kernels:
-            padding = k // 2
-            self.branches.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, in_channels, k, padding=padding, groups=in_channels),
-                    nn.BatchNorm2d(in_channels),
-                    nn.SiLU()
-                )
-            )
-
-        # 动态选择器
-        self.selector = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(),
-            nn.Linear(in_channels, 32),
-            nn.ReLU(),
-            nn.Linear(32, len(kernels)),
-            nn.Softmax(dim=1)
-        )
-
-    def forward(self, x):
-        # 并行计算各分支
-        branch_outputs = [branch(x) for branch in self.branches]
-
-        # 生成选择权重
-        weights = self.selector(x)  # [B, num_kernels]
-
-        # 加权融合
-        out = torch.zeros_like(x)
-        for i in range(len(self.kernels)):
-            weight = weights[:, i].view(-1, 1, 1, 1)
-            out += weight * branch_outputs[i]
-
-        return out
-
-
 class AdvancedCA_RFA_EnhancedSPPF(nn.Module):
     """终极改进版SPPF模块 - 专为无人机小目标检测优化"""
 
@@ -868,71 +823,6 @@ class AdvancedCA_RFA_EnhancedSPPF(nn.Module):
 
         # 残差连接 + 自适应融合
         return self.beta * identity + self.alpha * x
-
-
-class EnhancedCoordAtt(nn.Module):
-    """增强版坐标注意力机制 - 改进小目标特征提取"""
-
-    def __init__(self, in_channels, reduction=16):
-        super().__init__()
-        # 使用分组卷积减少参数
-        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
-        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
-
-        mid_channels = max(8, in_channels // reduction)
-
-        # 添加深度可分离卷积增强特征提取
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, groups=in_channels),
-            nn.Conv2d(in_channels, mid_channels, kernel_size=1),
-            nn.BatchNorm2d(mid_channels),
-            nn.Hardswish(inplace=True)
-        )
-
-        # 使用不同卷积核增强特征
-        self.conv_h = nn.Sequential(
-            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
-            nn.Conv2d(mid_channels, in_channels, kernel_size=1)
-        )
-        self.conv_w = nn.Sequential(
-            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
-            nn.Conv2d(mid_channels, in_channels, kernel_size=1)
-        )
-
-        # 添加通道注意力作为补充
-        self.channel_att = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channels, in_channels // reduction, 1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels // reduction, in_channels, 1),
-            nn.Sigmoid()
-        )
-
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        identity = x
-
-        # 高度方向注意力
-        h = self.pool_h(x)
-        h = self.conv1(h)
-        h = self.conv_h(h)
-        h_att = self.sigmoid(h)
-
-        # 宽度方向注意力
-        w = self.pool_w(x)
-        w = self.conv1(w)
-        w = self.conv_w(w)
-        w_att = self.sigmoid(w)
-
-        # 通道注意力
-        c_att = self.channel_att(x)
-
-        # 融合空间和通道注意力
-        att = h_att * w_att * c_att
-
-        # 应用注意力权重
-        return identity * att + x  # 残差连接
 
 
 class RFAtt(nn.Module):
@@ -1556,6 +1446,223 @@ class DroneSPPF(nn.Module):
             out = out * attn
 
         return out
+
+
+class FusionSPPF(nn.Module):
+    """增强型SPPF模块 - 融合坐标注意力和动态感受野注意力"""
+
+    def __init__(self, c1, c2, k=5, reduction=16, kernels=[1, 3, 5, 7]):
+        """
+        参数:
+            c1: 输入通道数
+            c2: 输出通道数
+            k: SPPF池化核大小
+            reduction: 坐标注意力的缩减率
+            kernels: 动态感受野注意力的卷积核列表
+        """
+        super().__init__()
+
+        # 第一部分：通道压缩
+        c_ = c1 // 2
+        self.cv1 = nn.Sequential(
+            nn.Conv2d(c1, c_, 1, 1),
+            nn.BatchNorm2d(c_),
+            nn.SiLU()
+        )
+
+        # 第二部分：多分支特征金字塔
+        self.branch_attentions = nn.ModuleList()
+        for _ in range(3):  # 为三个池化分支创建注意力模块
+            branch = nn.Sequential(
+                nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2),
+                FusionAtt(c_, reduction, kernels)  # 融合注意力模块
+            )
+            self.branch_attentions.append(branch)
+
+        # 第三部分：特征融合
+        self.cv2 = nn.Sequential(
+            nn.Conv2d(c_ * 4, c2, 1, 1),
+            nn.BatchNorm2d(c2),
+            nn.SiLU()
+        )
+
+        # 第四部分：全局特征增强
+        self.global_att = FusionAtt(c2, reduction, kernels)  # 最终输出增强
+
+    def forward(self, x):
+        # 初始特征压缩
+        x = self.cv1(x)
+
+        # 多尺度特征提取 + 注意力增强
+        branch_outputs = [x]  # 保留原始特征
+
+        # 通过三个池化分支处理
+        for branch in self.branch_attentions:
+            x = branch(x)
+            branch_outputs.append(x)
+
+        # 特征融合
+        x = torch.cat(branch_outputs, dim=1)
+        x = self.cv2(x)
+
+        # 全局注意力增强
+        return self.global_att(x)
+
+
+class FusionAtt(nn.Module):
+    """融合注意力模块 - 结合坐标注意力和动态感受野注意力"""
+
+    def __init__(self, channels, reduction=16, kernels=[1, 3, 5, 7]):
+        super().__init__()
+
+        # 动态感受野注意力
+        self.dynamic_rf = DynamicRFAtt(channels, kernels)
+
+        # 增强坐标注意力
+        self.enhanced_coord = EnhancedCoordAtt(channels, reduction)
+
+        # 特征融合卷积
+        self.fusion_conv = nn.Sequential(
+            nn.Conv2d(channels * 2, channels, 3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.SiLU()
+        )
+
+    def forward(self, x):
+        identity = x
+
+        # 并行应用两种注意力
+        rf_feat = self.dynamic_rf(x)
+        coord_feat = self.enhanced_coord(x)
+
+        # 特征融合
+        fused = torch.cat([rf_feat, coord_feat], dim=1)
+        fused = self.fusion_conv(fused)
+
+        # 残差连接
+        return fused + identity
+
+
+class EnhancedCoordAtt(nn.Module):
+    """增强版坐标注意力机制 - 改进小目标特征提取"""
+
+    def __init__(self, in_channels, reduction=16):
+        super().__init__()
+        # 使用分组卷积减少参数
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        mid_channels = max(8, in_channels // reduction)
+
+        # 添加深度可分离卷积增强特征提取
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, groups=in_channels),
+            nn.Conv2d(in_channels, mid_channels, kernel_size=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.Hardswish(inplace=True)
+        )
+
+        # 使用不同卷积核增强特征
+        self.conv_h = nn.Sequential(
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.Conv2d(mid_channels, in_channels, kernel_size=1)
+        )
+        self.conv_w = nn.Sequential(
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, padding=1),
+            nn.Conv2d(mid_channels, in_channels, kernel_size=1)
+        )
+
+        # 添加通道注意力作为补充
+        self.channel_att = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_channels, in_channels // reduction, 1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels // reduction, in_channels, 1),
+            nn.Sigmoid()
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        identity = x
+
+        # 高度方向注意力
+        h = self.pool_h(x)
+        h = self.conv1(h)
+        h = self.conv_h(h)
+        h_att = self.sigmoid(h)
+
+        # 宽度方向注意力
+        w = self.pool_w(x)
+        w = self.conv1(w)
+        w = self.conv_w(w)
+        w_att = self.sigmoid(w)
+
+        # 通道注意力
+        c_att = self.channel_att(x)
+
+        # 融合空间和通道注意力
+        att = h_att * w_att * c_att
+
+        # 应用注意力权重
+        return identity * att + identity  # 残差连接
+
+
+class DynamicRFAtt(nn.Module):
+    """自适应选择最佳感受野的注意力机制"""
+
+    def __init__(self, in_channels, kernels=[1, 3, 5, 7]):
+        super().__init__()
+        self.branches = nn.ModuleList()
+        self.kernels = kernels
+
+        # 创建不同感受野的分支
+        for k in kernels:
+            padding = k // 2
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, k, padding=padding, groups=in_channels),
+                    nn.BatchNorm2d(in_channels),
+                    nn.SiLU()
+                )
+            )
+
+        # 动态选择器
+        self.selector = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(in_channels, 32),
+            nn.ReLU(),
+            nn.Linear(32, len(kernels)),
+            nn.Softmax(dim=1)
+        )
+
+        # 特征增强卷积
+        self.enhance_conv = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        identity = x
+
+        # 并行计算各分支
+        branch_outputs = [branch(x) for branch in self.branches]
+
+        # 生成选择权重
+        weights = self.selector(x)  # [B, num_kernels]
+
+        # 加权融合
+        out = torch.zeros_like(x)
+        for i in range(len(self.kernels)):
+            weight = weights[:, i].view(-1, 1, 1, 1)
+            out += weight * branch_outputs[i]
+
+        # 特征增强
+        out = self.enhance_conv(out)
+
+        # 残差连接
+        return identity * out + identity
 
 
 class SPPF(nn.Module):
