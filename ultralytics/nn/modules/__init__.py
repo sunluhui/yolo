@@ -59,7 +59,8 @@ from .block import (
     TorchVision,
     SPPFCSPC,
     A2C2f, AAttn, SPPCSPC, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, AdvancedCA_RFA_EnhancedSPPF,
-    AdaptiveSPPF, FocalModulation, SPPFA, SPPF_DC, SPPF_Att, SPPF_GAP, SPPF_MultiScale, DroneSPPF, FusionSPPF
+    AdaptiveSPPF, FocalModulation, SPPFA, SPPF_DC, SPPF_Att, SPPF_GAP, SPPF_MultiScale, DroneSPPF, FusionSPPF,
+    ImprovedSPPF
 )
 from .conv import (
     CBAM,
@@ -193,6 +194,7 @@ __all__ = (
     "SPPF_MultiScale",
     "DroneSPPF",
     "FusionSPPF",
+    "ImprovedSPPF",
 )
 from .ela import ELA
 from .ms_cam import MS_CAM

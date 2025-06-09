@@ -68,7 +68,7 @@ from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import BiFPN_Concat2
 from ultralytics.nn.modules.block import CoordAtt, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, \
     AdvancedCA_RFA_EnhancedSPPF, AdaptiveSPPF, FocalModulation, SPPFA, SPPF_DC, SPPF_Att, SPPF_GAP, SPPF_MultiScale, \
-    DroneSPPF, FusionSPPF
+    DroneSPPF, FusionSPPF, ImprovedSPPF
 from ultralytics.nn.modules.biformer import BiFormerBlock
 from ultralytics.nn.modules.block import SPPFCSPC
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
@@ -1016,6 +1016,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             SPPF_MultiScale,
             DroneSPPF,
             FusionSPPF,
+            ImprovedSPPF,
 
         }
     )

@@ -1665,6 +1665,61 @@ class DynamicRFAtt(nn.Module):
         return identity * out + identity
 
 
+class ImprovedSPPF(nn.Module):
+    def __init__(self, c1, c2, k=5):
+        super().__init__()
+        c_ = c1 // 2
+
+        # 通道压缩卷积 + 激活函数
+        self.cv1 = nn.Sequential(
+            Conv(c1, c_, 1, 1),
+            nn.SiLU()
+        )
+
+        # 空洞卷积分支 (替代部分池化)
+        self.dilated_conv = nn.Sequential(
+            Conv(c_, c_, 3, 1, dilation=2),  # 空洞率2
+            nn.SiLU()
+        )
+
+        # 池化层 (仅保留2次)
+        self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+        # 通道注意力 (提升小目标特征权重)
+        self.attn = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(c_ * 4, c_ // 4, 1),
+            nn.SiLU(),
+            nn.Conv2d(c_ // 4, c_ * 4, 1),
+            nn.Sigmoid()
+        )
+
+        # 输出卷积
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+
+    def forward(self, x):
+        # 分支1: 原始特征
+        x1 = self.cv1(x)
+
+        # 分支2: 空洞卷积特征
+        x2 = self.dilated_conv(x1)
+
+        # 分支3: 单次池化特征
+        x3 = self.m(x1)
+
+        # 分支4: 二次池化特征 (代替原始三次池化)
+        x4 = self.m(x3)
+
+        # 特征拼接
+        y = torch.cat([x1, x2, x3, x4], 1)
+
+        # 通道注意力加权
+        attn_weights = self.attn(y)
+        y = y * attn_weights
+
+        return self.cv2(y)
+
+
 class SPPF(nn.Module):
     """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
