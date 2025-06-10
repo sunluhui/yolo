@@ -1071,7 +1071,7 @@ class RFAtt(nn.Module):
 
 
 class CA_RFA_SPPF(nn.Module):
-    """集成CA和RFA的改进SPPF模块"""
+    """集成CA和RFA的改进SPPF模块，毕业论文最新版本改进"""
 
     def __init__(self, c1, c2, k=5, bins=100):
         super().__init__()
