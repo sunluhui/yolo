@@ -11,10 +11,10 @@ class MultiBranchAttention(nn.Module):
         self.branches = nn.ModuleList()
 
         # 分支1: 通道注意力
-        self.branches.append(ChannelAttention(in_channels, reduction_ratio))
+        # self.branches.append(ChannelAttention(in_channels, reduction_ratio))
 
         # 分支2: 空间注意力
-        self.branches.append(SpatialAttention())
+        # self.branches.append(SpatialAttention())
 
         # 分支3: 局部上下文注意力 (不同感受野)
         for k in kernel_sizes:
