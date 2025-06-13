@@ -17,11 +17,11 @@ class MultiBranchAttention(nn.Module):
         self.branches.append(SpatialAttention())
 
         # 分支3: 局部上下文注意力 (不同感受野)
-        # for k in kernel_sizes:
-            #self.branches.append(LocalContextAttention(in_channels, k))
+        for k in kernel_sizes:
+            self.branches.append(LocalContextAttention(in_channels, k))
 
         # 分支4: 全局上下文注意力
-        # self.branches.append(GlobalContextAttention(in_channels))
+        self.branches.append(GlobalContextAttention(in_channels))
 
         # 特征融合层
         self.fusion = nn.Sequential(
