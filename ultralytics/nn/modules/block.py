@@ -411,143 +411,26 @@ class SPPFA(nn.Module):
 
 
 class FocalModulation(nn.Module):
-    def __init__(self, in_channels, kernel_size=3, reduction=2, focal_level=4,
-                 focal_window=5, *dilation_args, use_ca=True):
+    def __init__(self, dim, focal_window=7, focal_level=2):
         super().__init__()
-
-        # 更健壮的处理 dilation_rates 参数
-        dilation_rates = []
-
-        # 处理所有 dilation 参数
-        for arg in dilation_args:
-            if isinstance(arg, (list, tuple)):
-                # 展平嵌套列表
-                for item in arg:
-                    if isinstance(item, (list, tuple)):
-                        dilation_rates.extend(item)
-                    else:
-                        dilation_rates.append(item)
-            else:
-                dilation_rates.append(arg)
-
-        # 如果没有提供参数，使用默认值
-        if not dilation_rates:
-            dilation_rates = [1, 2, 4]
-
-        # 确保所有元素都是整数
-        try:
-            dilation_rates = [int(d) for d in dilation_rates]
-        except (TypeError, ValueError):
-            # 如果转换失败，使用默认值
-            print(f"Warning: Invalid dilation_rates {dilation_rates}, using default [1,2,4]")
-            dilation_rates = [1, 2, 4]
-
-        # 确保有足够的dilation_rates
-        if len(dilation_rates) < focal_level:
-            # 重复列表直到满足长度要求
-            dilation_rates = dilation_rates * (focal_level // len(dilation_rates) + 1)
-            dilation_rates = dilation_rates[:focal_level]
-
-        self.in_channels = in_channels
-        self.reduction = reduction
-        self.focal_level = focal_level
-        self.focal_window = focal_window
-        self.dilation_rates = dilation_rates
-        self.use_ca = use_ca
-
-        # 投影层
-        self.projector = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels * 2, kernel_size=1),
-            nn.BatchNorm2d(in_channels * 2),
-            nn.GELU(),
-            nn.Conv2d(in_channels * 2, in_channels * 2, kernel_size=3,
-                      padding=1, groups=in_channels),
-            nn.GELU()
-        )
-
-        # 多尺度上下文聚合
-        self.aggregators = nn.ModuleList()
-        for k in range(focal_level):
-            # 获取当前层级的dilation值
-            dilation_val = self.dilation_rates[k]
-
-            # 计算当前层级的卷积核大小
-            kernel_size_val = self.focal_window + 2 * k
-
-            # 正确的padding计算
-            padding_val = dilation_val * (kernel_size_val - 1) // 2
-            padding_val = int(padding_val)  # 确保是整数
-
-            # 添加聚合层
-            self.aggregators.append(
+        self.focal_conv = nn.ModuleList()
+        for i in range(focal_level):
+            kernel_size = focal_window * (2 ** i)
+            self.focal_conv.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channels, in_channels,
-                              kernel_size=kernel_size_val,
-                              padding=padding_val,
-                              dilation=dilation_val,
-                              groups=in_channels,
-                              bias=False),
-                    nn.BatchNorm2d(in_channels),
+                    nn.Conv2d(dim, dim, kernel_size, padding=kernel_size // 2, groups=dim),
                     nn.GELU()
                 )
             )
-
-        # 门控机制
-        self.gate = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels // 4, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels // 4, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
-
-        # 坐标注意力
-        if use_ca:
-            self.ca = CoordinateAttention(in_channels)
-
-        # 调制器
-        reduced_channels = max(in_channels // reduction, 32)
-        self.modulator = nn.Sequential(
-            nn.Conv2d(in_channels * focal_level, reduced_channels, kernel_size=1),
-            nn.GELU(),
-            nn.Conv2d(reduced_channels, in_channels, kernel_size=1),
-            nn.LayerNorm([in_channels, 1, 1])
-        )
-
-        # 输出投影
-        self.output_proj = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(in_channels)
-        )
+        self.gate = nn.Linear(dim, focal_level + 1)
+        self.proj = nn.Linear(dim, dim)
 
     def forward(self, x):
-        # 保存残差连接
-        residual = x
-
-        # 特征投影
-        proj = self.projector(x)
-        query, context = proj.chunk(2, dim=1)
-
-        # 多尺度上下文聚合
-        context_layers = []
-        for agg in self.aggregators:
-            ctx = agg(context)
-            if self.use_ca:
-                ctx = self.ca(ctx)  # 应用坐标注意力
-            context_layers.append(ctx)
-
-        # 拼接多尺度特征
-        context_all = torch.cat(context_layers, dim=1)
-
-        # 调制特征
-        modulated = self.modulator(context_all) * query
-
-        # 空间门控
-        gate = self.gate(x)
-        modulated = modulated * gate
-
-        # 输出投影 + 残差连接
-        output = self.output_proj(modulated) + residual
-        return output
+        ctx_list = [conv(x) for conv in self.focal_conv]
+        ctx = torch.stack(ctx_list, dim=0).mean(0)  # 多尺度上下文聚合
+        gate = self.gate(x.mean([2, 3])).softmax(1)
+        mod = (gate.unsqueeze(-1).unsqueeze(-1) * ctx) # 门控加权
+        return self.proj(mod) + x  # 仿射变换注入
 
 
 class CoordinateAttention(nn.Module):
