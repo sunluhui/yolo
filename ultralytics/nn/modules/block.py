@@ -411,26 +411,73 @@ class SPPFA(nn.Module):
 
 
 class FocalModulation(nn.Module):
-    def __init__(self, dim, focal_window=7, focal_level=2):
+    def __init__(self, c1, c2, focal_window=7, focal_level=2):
+        """
+        c1: 输入通道数 (自动传入)
+        c2: 输出通道数 (YAML中第一个参数)
+        focal_window: 基础窗口大小 (YAML中第二个参数)
+        focal_level: 多尺度层级数 (YAML中第三个参数)
+        """
         super().__init__()
+        self.dim = c2
+        self.focal_level = focal_level
+
+        # 多尺度深度卷积层
         self.focal_conv = nn.ModuleList()
         for i in range(focal_level):
             kernel_size = focal_window * (2 ** i)
+            padding = kernel_size // 2
             self.focal_conv.append(
                 nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size, padding=kernel_size // 2, groups=dim),
+                    nn.Conv2d(self.dim, self.dim, kernel_size,
+                              padding=padding, groups=self.dim, bias=False),
+                    nn.BatchNorm2d(self.dim),
                     nn.GELU()
                 )
             )
-        self.gate = nn.Linear(dim, focal_level + 1)
-        self.proj = nn.Linear(dim, dim)
+
+        # 门控机制和投影层
+        self.gate = nn.Linear(self.dim, focal_level + 1)
+        self.proj = nn.Sequential(
+            nn.Conv2d(self.dim, self.dim, 1),
+            nn.BatchNorm2d(self.dim)
+        )
+
+        # 通道调整 (当输入输出通道数不同时)
+        self.channel_adjust = nn.Identity() if c1 == c2 else nn.Conv2d(c1, c2, 1)
 
     def forward(self, x):
-        ctx_list = [conv(x) for conv in self.focal_conv]
-        ctx = torch.stack(ctx_list, dim=0).mean(0)  # 多尺度上下文聚合
-        gate = self.gate(x.mean([2, 3])).softmax(1)
-        mod = (gate.unsqueeze(-1).unsqueeze(-1) * ctx) # 门控加权
-        return self.proj(mod) + x  # 仿射变换注入
+        # 通道调整
+        x = self.channel_adjust(x)
+        B, C, H, W = x.shape
+
+        # 多尺度特征提取 (确保所有特征图尺寸一致)
+        ctx_list = []
+        for conv in self.focal_conv:
+            # 使用自适应平均池化统一尺寸
+            ctx = conv(x)
+            ctx = F.adaptive_avg_pool2d(ctx, (H, W))
+            ctx_list.append(ctx)
+
+        # 上下文聚合 (使用平均池化替代堆叠)
+        ctx = torch.zeros_like(x)
+        for c in ctx_list:
+            ctx += c
+        ctx = ctx / len(ctx_list)
+
+        # 门控机制
+        gate_scores = self.gate(x.mean([2, 3]))
+        gate = F.softmax(gate_scores, dim=1)
+
+        # 特征调制 (使用广播机制避免尺寸问题)
+        gate_weights = gate[:, 1:].view(B, self.focal_level, 1, 1, 1)  # [B, L, 1, 1, 1]
+        weighted_ctx = torch.zeros_like(x)
+
+        for i in range(self.focal_level):
+            weighted_ctx += gate_weights[:, i] * ctx_list[i]
+
+        # 投影并融合
+        return x + self.proj(weighted_ctx)
 
 
 class CoordinateAttention(nn.Module):
