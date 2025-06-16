@@ -1089,9 +1089,9 @@ class CA_RFA_SPPF(nn.Module):
         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
 
         # 坐标注意力模块 (每个分支后)
-        #self.ca1 = CoordAtt(c_)
-        #self.ca2 = CoordAtt(c_)
-        #self.ca3 = CoordAtt(c_)
+        self.ca1 = CoordAtt(c_)
+        self.ca2 = CoordAtt(c_)
+        self.ca3 = CoordAtt(c_)
 
         # 输出卷积
         self.cv2 = nn.Sequential(
@@ -1123,9 +1123,9 @@ class CA_RFA_SPPF(nn.Module):
         y3 = self.m(y2)  # 第三层池化
 
         # 在池化分支后应用坐标注意力
-        #y1 = self.ca1(y1)
-        #y2 = self.ca2(y2)
-        #y3 = self.ca3(y3)
+        y1 = self.ca1(y1)
+        y2 = self.ca2(y2)
+        y3 = self.ca3(y3)
 
         # 特征拼接
         x = torch.cat([y0, y1, y2, y3], dim=1)
