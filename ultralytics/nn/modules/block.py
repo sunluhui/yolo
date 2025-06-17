@@ -1031,7 +1031,7 @@ class CA_RFA_SPPF(nn.Module):
         )
 
         # 感受野注意力模块 (拼接后)
-        #self.rfa = RFAtt(c2, kernels=[3, 5, 7])
+        self.rfa = RFAtt(c2, kernels=[3, 5, 7])
 
         # 残差连接
         self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
@@ -1064,7 +1064,7 @@ class CA_RFA_SPPF(nn.Module):
         x = self.cv2(x)
 
         # 应用感受野注意力
-        #x = self.rfa(x)
+        x = self.rfa(x)
 
         # 残差连接 + 自适应融合
         return identity + self.alpha * x
