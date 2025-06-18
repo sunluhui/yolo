@@ -1047,7 +1047,7 @@ class CA_RFA_SPPF(nn.Module):
         x = self.cv1(x)
 
         # 多尺度池化分支
-        y0 = x  # 原始特征
+        #y0 = x  # 原始特征
         y1 = self.m(x)  # 第一层池化
         y2 = self.m(y1)  # 第二层池化
         y3 = self.m(y2)  # 第三层池化
@@ -1058,7 +1058,7 @@ class CA_RFA_SPPF(nn.Module):
         #y3 = self.ca3(y3)
 
         # 特征拼接
-        x = torch.cat([y0, y1, y2, y3], dim=1)
+        x = torch.cat([y1, y2, y3], dim=1)
 
         # 输出卷积
         x = self.cv2(x)
