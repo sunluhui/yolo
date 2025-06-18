@@ -1031,17 +1031,17 @@ class CA_RFA_SPPF(nn.Module):
         )
 
         # 感受野注意力模块 (拼接后)
-        #self.rfa = RFAtt(c2, kernels=[3, 5, 7])
+        self.rfa = RFAtt(c2, kernels=[3, 5, 7])
 
         # 残差连接
-        self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
+        #self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
 
         # 自适应参数
-        self.alpha = nn.Parameter(torch.tensor(0.7))  # 注意力融合系数
+        #self.alpha = nn.Parameter(torch.tensor(0.7))  # 注意力融合系数
 
     def forward(self, x):
         # 原始输入保留
-        identity = self.residual(x)
+        #identity = self.residual(x)
 
         # 第一阶段：通道减少
         x = self.cv1(x)
@@ -1064,10 +1064,11 @@ class CA_RFA_SPPF(nn.Module):
         x = self.cv2(x)
 
         # 应用感受野注意力
-        #x = self.rfa(x)
+        x = self.rfa(x)
 
         # 残差连接 + 自适应融合
-        return identity + self.alpha * x
+        #return identity + self.alpha * x
+        return x
 
 
 class DynamicConv2d(nn.Module):
