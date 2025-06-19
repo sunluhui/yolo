@@ -11,11 +11,11 @@ def find_extra_images(dataset_main, dataset_compare):
     :return: 多出的图片文件列表
     """
     # 获取主数据集的所有图片文件名（不含扩展名）
-    main_dir = Path(dataset_main) / "/home/a10/slh/yolo/datasets/DOTAv1.5/images/train"
+    main_dir = Path(dataset_main) / "/home/a10/slh/yolo/DOTAv1.5/images/train"
     main_images = {f.stem for f in main_dir.glob("*") if f.suffix.lower() in ['.jpg', '.png', '.jpeg']}
 
     # 获取对比数据集的所有图片文件名（不含扩展名）
-    compare_dir = Path(dataset_compare) / "/home/a10/slh/yolo/DOTAv1.5/images/train"
+    compare_dir = Path(dataset_compare) / "/home/a10/slh/yolo/datasets/DOTAv1.5/images/train"
     compare_images = {f.stem for f in compare_dir.glob("*") if f.suffix.lower() in ['.jpg', '.png', '.jpeg']}
 
     # 找出主数据集中有而对比数据集中没有的图片
@@ -60,8 +60,8 @@ def find_extra_labels(extra_images, dataset_main):
 
 if __name__ == "__main__":
     # 配置路径 - 修改为你实际的数据集路径
-    dataset_A = " /home/a10/slh/yolo/datasets/DOTAv1.5/images/train "  # 主数据集
-    dataset_B = " /home/a10/slh/yolo/DOTAv1.5/images/train "  # 对比数据集
+    dataset_A = " /home/a10/slh/yolo/DOTAv1.5/images/train "  # 主数据集
+    dataset_B = " /home/a10/slh/yolo/datasets/DOTAv1.5/images/train"  # 对比数据集
 
     # 找出多出的图片文件
     extra_images = find_extra_images(dataset_A, dataset_B)
