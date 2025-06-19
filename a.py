@@ -1,89 +1,59 @@
 import os
-import numpy as np
-from PIL import Image
+from pathlib import Path
 
-# 配置路径
-image_dir = "/home/a10/slh/DOTAv1.5/images"
-label_dir = "/home/a10/slh/DOTAv1.5/labels"
-output_dir = "/home/a10/slh/labels_yolo"
-os.makedirs(output_dir, exist_ok=True)
 
-# DOTA类别映射YOLO ID（按字母顺序排列）
-class_names = [
-    'plane', 'ship', 'storage tank', 'baseball diamond',
-    'tennis court', 'basketball court', 'ground track field', 'harbor',
-    'bridge', 'large vehicle', 'small vehicle',
-    'helicopter', 'roundabout', 'soccer ball field', 'swimming pool', 'container crane'  # DOTA v1.5有16类
-]
-class_to_id = {name: idx for idx, name in enumerate(class_names)}
+def find_missing_files(dataset_A, dataset_B):
+    # 获取数据集B的所有图片文件名（不含扩展名）
+    b_img_dir = Path(dataset_B) / "/home/a10/slh/yolo/DOTAv1.5/images/train"
+    b_images = {f.stem for f in b_img_dir.glob("*") if f.suffix in ['.jpg', '.png', '.jpeg']}
 
-# 遍历所有标注文件
-for label_file in os.listdir(label_dir):
-    if not label_file.endswith(".txt"):
-        continue
+    # 获取数据集A的所有图片文件名（不含扩展名）
+    a_img_dir = Path(dataset_A) / "/home/a10/slh/yolo/datasets/DOTAv1.5/images/train"
+    a_images = {f.stem for f in a_img_dir.glob("*") if f.suffix in ['.jpg', '.png', '.jpeg']}
 
-    base_name = os.path.splitext(label_file)[0]
-    img_path = os.path.join(image_dir, base_name + ".png")  # 根据实际图像扩展名调整
+    # 计算差异
+    missing_images = b_images - a_images
 
-    # 获取图像尺寸
-    try:
-        with Image.open(img_path) as img:
-            img_w, img_h = img.size
-    except FileNotFoundError:
-        print(f"跳过 {label_file}：找不到对应图像")
-        continue
+    # 检查对应的标注文件
+    missing_files = []
+    for img_stem in missing_images:
+        img_ext = next((f.suffix for f in b_img_dir.glob(f"{img_stem}.*")), "")
+        label_path = Path(dataset_B) / "labels/train" / f"{img_stem}.txt"
 
-    yolo_lines = []
+        if label_path.exists():
+            missing_files.append({
+                "image": f"{img_stem}{img_ext}",
+                "label": f"{img_stem}.txt",
+                "status": "完整"
+            })
+        else:
+            missing_files.append({
+                "image": f"{img_stem}{img_ext}",
+                "label": f"{img_stem}.txt",
+                "status": "缺失标注"
+            })
 
-    with open(os.path.join(label_dir, label_file), 'r') as f:
-        lines = f.readlines()
+    return missing_files
 
-    for line in lines:
-        # 跳过注释行和空行
-        if line.startswith("imagesource") or line.startswith("gsd") or not line.strip():
-            continue
 
-        parts = line.strip().split()
-        if len(parts) < 9:
-            continue
+if __name__ == "__main__":
+    # 配置路径
+    dataset_A = "/home/a10/slh/yolo/datasets/DOTAv1.5/images/train"
+    dataset_B = "/home/a10/slh/yolo/DOTAv1.5/images/train"
 
-        # 解析旋转框坐标和类别
-        points = list(map(float, parts[:8]))
-        class_name = parts[8]
-        difficulty = int(parts[9]) if len(parts) > 9 else 0
+    # 查找缺失文件
+    missing_files = find_missing_files(dataset_A, dataset_B)
 
-        # 跳过困难样本（可选）
-        # if difficulty == 1:
-        #     continue
+    # 打印报告
+    print(f"{'图片文件':<20} {'标注文件':<20} {'状态':<10}")
+    print("-" * 50)
+    for item in missing_files:
+        print(f"{item['image']:<20} {item['label']:<20} {item['status']:<10}")
 
-        # 转换为水平矩形框
-        xs = points[0::2]  # 所有x坐标
-        ys = points[1::2]  # 所有y坐标
-        x_min, x_max = min(xs), max(xs)
-        y_min, y_max = min(ys), max(ys)
+    # 保存结果
+    with open("missing_files_report.csv", "w") as f:
+        f.write("image,label,status\n")
+        for item in missing_files:
+            f.write(f"{item['image']},{item['label']},{item['status']}\n")
 
-        # 计算中心点和宽高（归一化）
-        cx = (x_min + x_max) / 2.0 / img_w
-        cy = (y_min + y_max) / 2.0 / img_h
-        w = (x_max - x_min) / img_w
-        h = (y_max - y_min) / img_h
-
-        # 确保坐标在[0,1]范围内
-        cx = max(0, min(1, cx))
-        cy = max(0, min(1, cy))
-        w = max(0, min(1, w))
-        h = max(0, min(1, h))
-
-        # 获取类别ID
-        if class_name not in class_to_id:
-            continue
-        class_id = class_to_id[class_name]
-
-        yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
-
-    # 写入YOLO格式文件
-    output_path = os.path.join(output_dir, base_name + ".txt")
-    with open(output_path, 'w') as f:
-        f.write("\n".join(yolo_lines))
-
-print("转换完成！YOLO标签保存在:", output_dir)
+    print(f"\n找到 {len(missing_files)} 个缺失文件，报告已保存到 missing_files_report.csv")
