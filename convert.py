@@ -92,9 +92,9 @@ def convert_obb_to_yolo(obb_label_dir, image_dir, output_dir, class_list):
 
 if __name__ == "__main__":
     # 配置路径和类别
-    OBB_LABEL_DIR = "datasets/DOTAv1.5/labels"  # OBB标注目录
-    IMAGE_DIR = "datasets/DOTAv1.5/images"  # 图像目录
-    OUTPUT_DIR = "datasets/DOTAv1.5/yolo_labels"  # 输出目录
+    OBB_LABEL_DIR = "/home/a10/slh/yolo/DOTAv1.5/labels"  # OBB标注目录
+    IMAGE_DIR = "/home/a10/slh/yolo/DOTAv1.5/images"  # 图像目录
+    OUTPUT_DIR = "/home/a10/slh/yolo/DOTAv1.5/yolo_labels"  # 输出目录
 
     # 加载类别列表
     with open("classes.txt", "r") as f:
