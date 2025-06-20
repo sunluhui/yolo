@@ -5,7 +5,7 @@ model = YOLO('runs/detect/train248/weights/best.pt')  # 每次训练完进行测
 
 # 在测试集上进行评估
 metrics = model.val(
-    data='VisDrone.yaml',  # 数据集配置文件路径
+    data='DOTAv1.5.yaml',  # 数据集配置文件路径
     split='test',                   # 指定使用测试集
 )
 
