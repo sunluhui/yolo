@@ -1,88 +1,84 @@
 import os
+import shutil
 from pathlib import Path
 
 
-def find_extra_images(dataset_main, dataset_compare):
+def delete_val_files_from_train(dataset_root):
     """
-    找出dataset_main中比dataset_compare多出的图片文件
+    从训练集中删除与验证集同名的图片和标签文件
 
-    :param dataset_main: 主数据集路径
-    :param dataset_compare: 对比数据集路径
-    :return: 多出的图片文件列表
+    参数:
+        dataset_root (str): 数据集根目录路径
     """
-    # 获取主数据集的所有图片文件名（不含扩展名）
-    main_dir = Path(dataset_main) / "/home/a10/slh/yolo/DOTAv1.5/images/train"
-    main_images = {f.stem for f in main_dir.glob("*") if f.suffix.lower() in ['.jpg', '.png', '.jpeg']}
+    # 创建备份目录
+    backup_dir = Path(dataset_root) / f"backup_{Path(dataset_root).name}_{os.getpid()}"
+    backup_dir.mkdir(parents=True, exist_ok=True)
 
-    # 获取对比数据集的所有图片文件名（不含扩展名）
-    compare_dir = Path(dataset_compare) / "/home/a10/slh/yolo/datasets/DOTAv1.5/images/train"
-    compare_images = {f.stem for f in compare_dir.glob("*") if f.suffix.lower() in ['.jpg', '.png', '.jpeg']}
+    print(f"数据集根目录: {dataset_root}")
+    print(f"备份目录: {backup_dir}\n")
 
-    # 找出主数据集中有而对比数据集中没有的图片
-    extra_images = main_images - compare_images
+    # 定义目录路径
+    dirs = {
+        "img_train": Path(dataset_root) / "/home/a10/slh/yolo/datasets/DOTAv1.5/images/train",
+        "img_val": Path(dataset_root) / "/home/a10/slh/yolo/datasets/DOTAv1.5/images/val",
+        "label_train": Path(dataset_root) / "/home/a10/slh/yolo/datasets/DOTAv1.5/labels/train",
+        "label_val": Path(dataset_root) / "/home/a10/slh/yolo/datasets/DOTAv1.5/labels/val"
+    }
 
-    # 获取完整的文件名（带扩展名）
-    extra_files = []
-    for img_stem in extra_images:
-        # 查找原始扩展名
-        img_file = next((f for f in main_dir.glob(f"{img_stem}.*") if f.suffix.lower() in ['.jpg', '.png', '.jpeg']),
-                        None)
-        if img_file:
-            extra_files.append(img_file.name)
+    # 验证目录是否存在
+    for name, path in dirs.items():
+        if not path.exists():
+            print(f"错误: 目录不存在 - {path}")
+            return
 
-    return sorted(extra_files)
+    # 获取验证集文件名（不带扩展名）
+    val_img_files = {f.stem for f in dirs["img_val"].glob("*") if f.is_file()}
+    val_label_files = {f.stem for f in dirs["label_val"].glob("*") if f.is_file()}
+    val_files = val_img_files | val_label_files
 
+    print(f"验证集文件数量: {len(val_files)}")
 
-def find_extra_labels(extra_images, dataset_main):
-    """
-    找出多出图片对应的标签文件
+    # 删除训练集中匹配的文件
+    deleted_count = 0
 
-    :param extra_images: 多出的图片文件名列表
-    :param dataset_main: 主数据集路径
-    :return: 多出的标签文件列表
-    """
-    labels_dir = Path(dataset_main) / "labels/train"
-    extra_labels = []
+    # 处理训练集图片
+    for img_file in dirs["img_train"].glob("*"):
+        if img_file.is_file() and img_file.stem in val_files:
+            # 创建备份
+            backup_path = backup_dir / "images/train" / img_file.name
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(img_file), str(backup_path))
+            print(f"已备份并删除图片: {img_file.name}")
+            deleted_count += 1
 
-    for img_file in extra_images:
-        # 去除扩展名
-        img_stem = Path(img_file).stem
-        label_file = f"{img_stem}.txt"
+    # 处理训练集标签
+    for label_file in dirs["label_train"].glob("*"):
+        if label_file.is_file() and label_file.stem in val_files:
+            # 创建备份
+            backup_path = backup_dir / "labels/train" / label_file.name
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(label_file), str(backup_path))
+            print(f"已备份并删除标签: {label_file.name}")
+            deleted_count += 1
 
-        # 检查标签文件是否存在
-        if (labels_dir / label_file).exists():
-            extra_labels.append(label_file)
-        else:
-            print(f"警告: 图片 {img_file} 没有对应的标签文件")
+    # 输出结果
+    print(f"\n操作完成! 共删除 {deleted_count} 个文件")
+    print(f"所有删除的文件已备份到: {backup_dir}")
 
-    return extra_labels
+    # 统计剩余文件
+    remaining_img = len(list(dirs["img_train"].glob("*")))
+    remaining_label = len(list(dirs["label_train"].glob("*")))
+    print(f"\n训练集剩余: {remaining_img} 张图片, {remaining_label} 个标签")
 
 
 if __name__ == "__main__":
-    # 配置路径 - 修改为你实际的数据集路径
-    dataset_A = " /home/a10/slh/yolo/DOTAv1.5/images/train "  # 主数据集
-    dataset_B = " /home/a10/slh/yolo/datasets/DOTAv1.5/images/train"  # 对比数据集
+    # 配置数据集路径 - 修改为您的实际路径
+    dataset_path = "/home/a10/slh/yolo/datasets/DOTAv1.5"
 
-    # 找出多出的图片文件
-    extra_images = find_extra_images(dataset_A, dataset_B)
+    # 执行删除操作
+    delete_val_files_from_train(dataset_path)
 
-    # 找出对应的标签文件
-    extra_labels = find_extra_labels(extra_images, dataset_A)
-
-    # 打印结果
-    print(f"在 {dataset_A} 中多出的图片文件 ({len(extra_images)} 张):")
-    for img in extra_images:
-        print(f"  - {img}")
-
-    print(f"\n对应的标签文件 ({len(extra_labels)} 个):")
-    for label in extra_labels:
-        print(f"  - {label}")
-
-    # 保存结果到文件
-    with open("extra_files_report.txt", "w") as f:
-        f.write("多出的图片文件:\n")
-        f.write("\n".join([f"- {img}" for img in extra_images]))
-        f.write("\n\n多出的标签文件:\n")
-        f.write("\n".join([f"- {label}" for label in extra_labels]))
-
-    print("\n报告已保存到 extra_files_report.txt")
+    # 添加清理缓存文件的建议
+    print("\n建议操作: 删除旧缓存文件后重启训练")
+    print("rm -f /home/a10/slh/yolo/datasets/DOTAv1.5/labels/*.cache")
+    print("cd /home/a10/slh/yolo && python train.py")
