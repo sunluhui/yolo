@@ -1,29 +1,53 @@
 import os
+import shutil
 
-# 设置标签目录路径
-train_label_dir = "/home/a10/slh/yolo/datasets/TinyPerson/labels/train"
-val_label_dir = "/home/a10/slh/yolo/datasets/TinyPerson/labels/val"
+# 配置路径
+image_dirs = [
+    "/home/a10/slh/yolo/datasets/TinyPerson/images/train",
+    "/home/a10/slh/yolo/datasets/TinyPerson/images/val"
+]
 
+label_dirs = [
+    "/home/a10/slh/yolo/datasets/TinyPerson/labels/train",
+    "/home/a10/slh/yolo/datasets/TinyPerson/labels/val"
+]
 
-def fix_labels(label_dir):
-    for filename in os.listdir(label_dir):
-        if filename.endswith(".txt"):
-            path = os.path.join(label_dir, filename)
-            with open(path, 'r') as f:
-                lines = f.readlines()
+backup_dir = "/home/a10/slh/yolo/datasets/TinyPerson/backup_no_labels"
 
-            corrected = []
-            for line in lines:
-                parts = line.strip().split()
-                if len(parts) >= 5:  # 确保是有效标签行
-                    if int(parts[0]) != 0:  # 检查类别ID是否为0
-                        parts[0] = '0'  # 修正为类别0
-                    corrected.append(" ".join(parts) + '\n')
-
-            with open(path, 'w') as f:
-                f.writelines(corrected)
+# 创建备份目录
+os.makedirs(backup_dir, exist_ok=True)
 
 
-fix_labels(train_label_dir)
-fix_labels(val_label_dir)
-print("标签修正完成！训练集和验证集所有非0类别已转换为0")
+def clean_images(image_dir, label_dir):
+    deleted_count = 0
+    kept_count = 0
+
+    # 获取所有标签文件名（不含扩展名）
+    label_files = {os.path.splitext(f)[0] for f in os.listdir(label_dir) if f.endswith('.txt')}
+
+    print(f"正在处理: {image_dir}")
+    for img_file in os.listdir(image_dir):
+        if img_file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            img_name = os.path.splitext(img_file)[0]
+
+            if img_name not in label_files:
+                # 移动无标签图片到备份目录
+                src = os.path.join(image_dir, img_file)
+                dst = os.path.join(backup_dir, img_file)
+                shutil.move(src, dst)
+                print(f"已移动: {img_file} -> backup_no_labels")
+                deleted_count += 1
+            else:
+                kept_count += 1
+
+    print(f"处理完成: 保留 {kept_count} 张图片, 移除 {deleted_count} 张无标签图片")
+    return deleted_count
+
+
+# 执行清理
+total_deleted = 0
+for img_dir, lbl_dir in zip(image_dirs, label_dirs):
+    total_deleted += clean_images(img_dir, lbl_dir)
+
+print(f"\n总移除图片数: {total_deleted}")
+print(f"无标签图片已备份至: {backup_dir}")
