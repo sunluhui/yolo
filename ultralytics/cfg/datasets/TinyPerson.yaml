@@ -6,7 +6,7 @@ test: images/test          # 测试集相对路径（可选）
 
 # 类别定义
 names:
-  1: person
+  0: person
 
 # 类别数量
 nc: 1
