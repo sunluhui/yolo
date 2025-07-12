@@ -12,7 +12,7 @@
 path: /home/a10/ZH/ultralytics-main/datasets/coco2017 # dataset root dir
 train: images/train2017 # train images (relative to 'path') 118287 images
 val: images/val2017 # val images (relative to 'path') 5000 images
-#test:  images/test2017 # 20288 of 40670 images, submit to https://competitions.codalab.org/competitions/20794
+test:  images/test2017 # 20288 of 40670 images, submit to https://competitions.codalab.org/competitions/20794
 
 # Classes
 names:
