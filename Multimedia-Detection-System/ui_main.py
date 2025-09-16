@@ -2,16 +2,16 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import cv2
 import os
 from datetime import datetime
-from yolo_detector import YOLODetector
-from database import add_detection_record
+from threading import Thread
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, user_id, username):
+    def __init__(self, user_id, username, db_manager, detector):
         super().__init__()
         self.user_id = user_id
         self.username = username
-        self.detector = YOLODetector()
+        self.db_manager = db_manager
+        self.detector = detector
         self.current_video_path = None
         self.is_playing = False
         self.is_detecting = False
@@ -19,74 +19,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle(f'小目标检测系统 - 欢迎 {self.username}使用！')
-        self.setGeometry(100, 100, 1400, 900)  # 增大窗口尺寸
-
-        # 设置应用程序样式
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f5f5;
-                font-family: 'Microsoft YaHei', Arial, sans-serif;
-            }
-            QTabWidget::pane {
-                border: 1px solid #d0d0d0;
-                background: white;
-                border-radius: 5px;
-                margin: 5px;
-            }
-            QTabWidget::tab-bar {
-                alignment: center;
-            }
-            QTabBar::tab {
-                background: #e0e0e0;
-                color: #333;
-                padding: 10px 20px;
-                margin: 5px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QTabBar::tab:selected {
-                background: #4CAF50;
-                color: white;
-            }
-            QTabBar::tab:hover {
-                background: #cccccc;
-            }
-            QPushButton {
-                border: none;
-                color: white;
-                padding: 10px 20px;
-                text-align: center;
-                font-size: 14px;
-                font-weight: bold;
-                border-radius: 5px;
-                min-width: 100px;
-            }
-            QPushButton:hover {
-                opacity: 0.9;
-            }
-            QPushButton:pressed {
-                opacity: 0.8;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #888888;
-            }
-            QLabel {
-                color: #333333;
-                font-weight: 500;
-            }
-            QLineEdit {
-                border: 2px solid #dcdcdc;
-                border-radius: 5px;
-                padding: 8px;
-                font-size: 14px;
-                background-color: white;
-            }
-            QLineEdit:focus {
-                border-color: #4CAF50;
-            }
-        """)
+        self.setWindowTitle(f'多媒体检测系统 - 欢迎 {self.username}')
+        self.setGeometry(100, 100, 1200, 800)
 
         # 中央部件
         central_widget = QtWidgets.QWidget()
@@ -94,51 +28,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 主布局
         main_layout = QtWidgets.QVBoxLayout(central_widget)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-
-        # 标题栏
-        header_widget = QtWidgets.QWidget()
-        header_layout = QtWidgets.QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-
-        title_label = QtWidgets.QLabel(f'小目标检测系统 - 欢迎 {self.username}使用！')
-        title_font = QtGui.QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #2c3e50;")
-
-        header_layout.addWidget(title_label)
-        header_layout.addStretch()
-
-        # 用户信息和退出按钮
-        user_info_label = QtWidgets.QLabel(f"用户ID: {self.user_id}")
-        user_info_label.setStyleSheet("color: #7f8c8d;")
-
-        self.logout_btn = QtWidgets.QPushButton('退出系统')
-        self.logout_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
-                padding: 5px 15px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-        """)
-        self.logout_btn.clicked.connect(self.close)
-        self.logout_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-
-        header_layout.addWidget(user_info_label)
-        header_layout.addWidget(self.logout_btn)
-
-        main_layout.addWidget(header_widget)
 
         # 选项卡
         self.tabs = QtWidgets.QTabWidget()
-        self.tabs.setDocumentMode(True)
-        self.tabs.setTabPosition(QtWidgets.QTabWidget.North)
-        self.tabs.setMovable(False)
 
         # 图片检测标签页
         self.image_tab = QtWidgets.QWidget()
@@ -155,110 +47,64 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setup_camera_tab()
         self.tabs.addTab(self.camera_tab, "实时检测")
 
+        # 历史记录标签页
+        self.history_tab = QtWidgets.QWidget()
+        self.setup_history_tab()
+        self.tabs.addTab(self.history_tab, "历史记录")
+
         main_layout.addWidget(self.tabs)
 
         # 状态栏
-        self.statusBar().showMessage('准备就绪')
-
-        # 设置窗口图标
-        self.setWindowIcon(QtGui.QIcon("icon.png"))  # 如果有图标文件的话
+        self.statusBar().showMessage('就绪')
 
     def setup_image_tab(self):
         layout = QtWidgets.QVBoxLayout(self.image_tab)
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
 
         # 控制按钮
         control_layout = QtWidgets.QHBoxLayout()
-        control_layout.setSpacing(15)
 
         self.select_image_btn = QtWidgets.QPushButton('选择图片')
         self.select_image_btn.clicked.connect(self.select_image)
-        self.select_image_btn.setStyleSheet("background-color: #3498db;")
-        self.select_image_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.select_image_btn)
 
         self.detect_image_btn = QtWidgets.QPushButton('开始检测')
         self.detect_image_btn.clicked.connect(self.detect_image)
         self.detect_image_btn.setEnabled(False)
-        self.detect_image_btn.setStyleSheet("background-color: #4CAF50;")
-        self.detect_image_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.detect_image_btn)
 
         self.save_image_btn = QtWidgets.QPushButton('保存结果')
         self.save_image_btn.clicked.connect(self.save_image_result)
         self.save_image_btn.setEnabled(False)
-        self.save_image_btn.setStyleSheet("background-color: #f39c12;")
-        self.save_image_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.save_image_btn)
 
-        control_layout.addStretch()
         layout.addLayout(control_layout)
 
         # 图片显示区域
         image_layout = QtWidgets.QHBoxLayout()
-        image_layout.setSpacing(20)
 
         # 原始图片
-        original_frame = QtWidgets.QFrame()
-        original_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        original_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        original_layout = QtWidgets.QVBoxLayout(original_frame)
-
-        original_title = QtWidgets.QLabel('原始图像')
-        original_title.setAlignment(QtCore.Qt.AlignCenter)
-        original_title.setStyleSheet("font-weight: bold; background-color: #e8f4fc; padding: 5px; border-radius: 3px;")
-        original_layout.addWidget(original_title)
-
         self.original_image_label = QtWidgets.QLabel()
         self.original_image_label.setAlignment(QtCore.Qt.AlignCenter)
         self.original_image_label.setMinimumSize(640, 480)
-        self.original_image_label.setStyleSheet('border: 1px solid #e0e0e0; background-color: #f8f8f8;')
-        self.original_image_label.setText('请选择图片')
-        original_layout.addWidget(self.original_image_label)
-
-        image_layout.addWidget(original_frame)
+        self.original_image_label.setStyleSheet('border: 1px solid gray;')
+        self.original_image_label.setText('原始图像')
+        image_layout.addWidget(self.original_image_label)
 
         # 检测结果图片
-        result_frame = QtWidgets.QFrame()
-        result_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        result_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        result_layout = QtWidgets.QVBoxLayout(result_frame)
-
-        result_title = QtWidgets.QLabel('检测结果')
-        result_title.setAlignment(QtCore.Qt.AlignCenter)
-        result_title.setStyleSheet("font-weight: bold; background-color: #e8f8e8; padding: 5px; border-radius: 3px;")
-        result_layout.addWidget(result_title)
-
         self.result_image_label = QtWidgets.QLabel()
         self.result_image_label.setAlignment(QtCore.Qt.AlignCenter)
         self.result_image_label.setMinimumSize(640, 480)
-        self.result_image_label.setStyleSheet('border: 1px solid #e0e0e0; background-color: #f8f8f8;')
-        self.result_image_label.setText('等待检测')
-        result_layout.addWidget(self.result_image_label)
-
-        image_layout.addWidget(result_frame)
+        self.result_image_label.setStyleSheet('border: 1px solid gray;')
+        self.result_image_label.setText('检测结果')
+        image_layout.addWidget(self.result_image_label)
 
         layout.addLayout(image_layout)
 
         # 检测信息
-        info_frame = QtWidgets.QFrame()
-        info_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        info_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        info_layout = QtWidgets.QVBoxLayout(info_frame)
-
-        info_title = QtWidgets.QLabel('检测信息')
-        info_title.setAlignment(QtCore.Qt.AlignCenter)
-        info_title.setStyleSheet("font-weight: bold; background-color: #f8f8f8; padding: 5px; border-radius: 3px;")
-        info_layout.addWidget(info_title)
-
         self.image_info_label = QtWidgets.QLabel('检测信息将显示在这里')
         self.image_info_label.setAlignment(QtCore.Qt.AlignLeft)
         self.image_info_label.setWordWrap(True)
-        self.image_info_label.setStyleSheet("padding: 10px;")
-        info_layout.addWidget(self.image_info_label)
-
-        layout.addWidget(info_frame)
+        layout.addWidget(self.image_info_label)
 
         self.image_tab.setLayout(layout)
 
@@ -268,107 +114,57 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setup_video_tab(self):
         layout = QtWidgets.QVBoxLayout(self.video_tab)
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
 
         # 控制按钮
         control_layout = QtWidgets.QHBoxLayout()
-        control_layout.setSpacing(15)
 
         self.select_video_btn = QtWidgets.QPushButton('选择视频')
         self.select_video_btn.clicked.connect(self.select_video)
-        self.select_video_btn.setStyleSheet("background-color: #3498db;")
-        self.select_video_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.select_video_btn)
 
         self.play_video_btn = QtWidgets.QPushButton('播放/暂停')
         self.play_video_btn.clicked.connect(self.toggle_video_play)
         self.play_video_btn.setEnabled(False)
-        self.play_video_btn.setStyleSheet("background-color: #9b59b6;")
-        self.play_video_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.play_video_btn)
 
         self.detect_video_btn = QtWidgets.QPushButton('开始检测')
         self.detect_video_btn.clicked.connect(self.detect_video)
         self.detect_video_btn.setEnabled(False)
-        self.detect_video_btn.setStyleSheet("background-color: #4CAF50;")
-        self.detect_video_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.detect_video_btn)
 
         self.save_video_btn = QtWidgets.QPushButton('保存结果')
         self.save_video_btn.clicked.connect(self.save_video_result)
         self.save_video_btn.setEnabled(False)
-        self.save_video_btn.setStyleSheet("background-color: #f39c12;")
-        self.save_video_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.save_video_btn)
 
-        control_layout.addStretch()
         layout.addLayout(control_layout)
 
         # 视频显示区域
         video_layout = QtWidgets.QHBoxLayout()
-        video_layout.setSpacing(20)
 
         # 原始视频
-        original_frame = QtWidgets.QFrame()
-        original_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        original_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        original_layout = QtWidgets.QVBoxLayout(original_frame)
-
-        original_title = QtWidgets.QLabel('原始视频')
-        original_title.setAlignment(QtCore.Qt.AlignCenter)
-        original_title.setStyleSheet("font-weight: bold; background-color: #e8f4fc; padding: 5px; border-radius: 3px;")
-        original_layout.addWidget(original_title)
-
         self.original_video_label = QtWidgets.QLabel()
         self.original_video_label.setAlignment(QtCore.Qt.AlignCenter)
         self.original_video_label.setMinimumSize(640, 480)
-        self.original_video_label.setStyleSheet('border: 1px solid #e0e0e0; background-color: #f8f8f8;')
-        self.original_video_label.setText('请选择视频')
-        original_layout.addWidget(self.original_video_label)
-
-        video_layout.addWidget(original_frame)
+        self.original_video_label.setStyleSheet('border: 1px solid gray;')
+        self.original_video_label.setText('原始视频')
+        video_layout.addWidget(self.original_video_label)
 
         # 检测结果视频
-        result_frame = QtWidgets.QFrame()
-        result_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        result_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        result_layout = QtWidgets.QVBoxLayout(result_frame)
-
-        result_title = QtWidgets.QLabel('检测结果')
-        result_title.setAlignment(QtCore.Qt.AlignCenter)
-        result_title.setStyleSheet("font-weight: bold; background-color: #e8f8e8; padding: 5px; border-radius: 3px;")
-        result_layout.addWidget(result_title)
-
         self.result_video_label = QtWidgets.QLabel()
         self.result_video_label.setAlignment(QtCore.Qt.AlignCenter)
         self.result_video_label.setMinimumSize(640, 480)
-        self.result_video_label.setStyleSheet('border: 1px solid #e0e0e0; background-color: #f8f8f8;')
-        self.result_video_label.setText('等待检测')
-        result_layout.addWidget(self.result_video_label)
-
-        video_layout.addWidget(result_frame)
+        self.result_video_label.setStyleSheet('border: 1px solid gray;')
+        self.result_video_label.setText('检测结果')
+        video_layout.addWidget(self.result_video_label)
 
         layout.addLayout(video_layout)
 
         # 检测信息
-        info_frame = QtWidgets.QFrame()
-        info_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        info_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        info_layout = QtWidgets.QVBoxLayout(info_frame)
-
-        info_title = QtWidgets.QLabel('检测信息')
-        info_title.setAlignment(QtCore.Qt.AlignCenter)
-        info_title.setStyleSheet("font-weight: bold; background-color: #f8f8f8; padding: 5px; border-radius: 3px;")
-        info_layout.addWidget(info_title)
-
         self.video_info_label = QtWidgets.QLabel('检测信息将显示在这里')
         self.video_info_label.setAlignment(QtCore.Qt.AlignLeft)
         self.video_info_label.setWordWrap(True)
-        self.video_info_label.setStyleSheet("padding: 10px;")
-        info_layout.addWidget(self.video_info_label)
-
-        layout.addWidget(info_frame)
+        layout.addWidget(self.video_info_label)
 
         self.video_tab.setLayout(layout)
 
@@ -383,74 +179,44 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setup_camera_tab(self):
         layout = QtWidgets.QVBoxLayout(self.camera_tab)
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
 
         # 控制按钮
         control_layout = QtWidgets.QHBoxLayout()
-        control_layout.setSpacing(15)
 
         self.start_camera_btn = QtWidgets.QPushButton('开启摄像头')
         self.start_camera_btn.clicked.connect(self.toggle_camera)
-        self.start_camera_btn.setStyleSheet("background-color: #3498db;")
-        self.start_camera_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.start_camera_btn)
 
         self.detect_camera_btn = QtWidgets.QPushButton('开始检测')
         self.detect_camera_btn.clicked.connect(self.toggle_camera_detection)
         self.detect_camera_btn.setEnabled(False)
-        self.detect_camera_btn.setStyleSheet("background-color: #4CAF50;")
-        self.detect_camera_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.detect_camera_btn)
 
         self.save_camera_btn = QtWidgets.QPushButton('保存录像')
         self.save_camera_btn.clicked.connect(self.save_camera_result)
         self.save_camera_btn.setEnabled(False)
-        self.save_camera_btn.setStyleSheet("background-color: #f39c12;")
-        self.save_camera_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         control_layout.addWidget(self.save_camera_btn)
 
-        control_layout.addStretch()
         layout.addLayout(control_layout)
 
         # 摄像头显示区域
-        camera_frame = QtWidgets.QFrame()
-        camera_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        camera_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        camera_layout = QtWidgets.QVBoxLayout(camera_frame)
+        camera_layout = QtWidgets.QHBoxLayout()
 
-        camera_title = QtWidgets.QLabel('摄像头画面')
-        camera_title.setAlignment(QtCore.Qt.AlignCenter)
-        camera_title.setStyleSheet("font-weight: bold; background-color: #e8f4fc; padding: 5px; border-radius: 3px;")
-        camera_layout.addWidget(camera_title)
-
+        # 实时摄像头
         self.camera_label = QtWidgets.QLabel()
         self.camera_label.setAlignment(QtCore.Qt.AlignCenter)
         self.camera_label.setMinimumSize(640, 480)
-        self.camera_label.setStyleSheet('border: 1px solid #e0e0e0; background-color: #f8f8f8;')
-        self.camera_label.setText('摄像头未开启')
+        self.camera_label.setStyleSheet('border: 1px solid gray;')
+        self.camera_label.setText('摄像头画面')
         camera_layout.addWidget(self.camera_label)
 
-        layout.addWidget(camera_frame)
+        layout.addLayout(camera_layout)
 
         # 检测信息
-        info_frame = QtWidgets.QFrame()
-        info_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        info_frame.setStyleSheet("QFrame { background-color: white; border-radius: 5px; }")
-        info_layout = QtWidgets.QVBoxLayout(info_frame)
-
-        info_title = QtWidgets.QLabel('检测信息')
-        info_title.setAlignment(QtCore.Qt.AlignCenter)
-        info_title.setStyleSheet("font-weight: bold; background-color: #f8f8f8; padding: 5px; border-radius: 3px;")
-        info_layout.addWidget(info_title)
-
         self.camera_info_label = QtWidgets.QLabel('摄像头就绪')
         self.camera_info_label.setAlignment(QtCore.Qt.AlignLeft)
         self.camera_info_label.setWordWrap(True)
-        self.camera_info_label.setStyleSheet("padding: 10px;")
-        info_layout.addWidget(self.camera_info_label)
-
-        layout.addWidget(info_frame)
+        layout.addWidget(self.camera_info_label)
 
         self.camera_tab.setLayout(layout)
 
@@ -462,6 +228,59 @@ class MainWindow(QtWidgets.QMainWindow):
         self.camera_timer.timeout.connect(self.update_camera_frame)
         self.camera_cap = None
         self.is_camera_detecting = False
+
+    def setup_history_tab(self):
+        layout = QtWidgets.QVBoxLayout(self.history_tab)
+
+        # 标题
+        title_label = QtWidgets.QLabel('检测历史记录')
+        title_label.setAlignment(QtCore.Qt.AlignCenter)
+        title_font = QtGui.QFont()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        layout.addWidget(title_label)
+
+        # 历史记录表格
+        self.history_table = QtWidgets.QTableWidget()
+        self.history_table.setColumnCount(4)
+        self.history_table.setHorizontalHeaderLabels(['检测类型', '源文件', '结果文件', '检测时间'])
+        self.history_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        layout.addWidget(self.history_table)
+
+        # 刷新按钮
+        self.refresh_btn = QtWidgets.QPushButton('刷新记录')
+        self.refresh_btn.clicked.connect(self.load_history)
+        layout.addWidget(self.refresh_btn)
+
+        self.history_tab.setLayout(layout)
+
+        # 加载历史记录
+        self.load_history()
+
+    def load_history(self):
+        """加载用户的检测历史记录"""
+        records = self.db_manager.get_detection_records(self.user_id)
+
+        self.history_table.setRowCount(len(records))
+        for row, record in enumerate(records):
+            detection_type, source_path, result_path, detection_time = record
+
+            # 只显示文件名而非完整路径
+            source_file = os.path.basename(source_path) if source_path else "实时摄像头"
+            result_file = os.path.basename(result_path) if result_path else "无"
+
+            self.history_table.setItem(row, 0, QtWidgets.QTableWidgetItem(detection_type))
+            self.history_table.setItem(row, 1, QtWidgets.QTableWidgetItem(source_file))
+            self.history_table.setItem(row, 2, QtWidgets.QTableWidgetItem(result_file))
+
+            # 确保时间显示格式正确
+            if isinstance(detection_time, datetime):
+                time_str = detection_time.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                time_str = str(detection_time)
+
+            self.history_table.setItem(row, 3, QtWidgets.QTableWidgetItem(time_str))
 
     def select_image(self):
         file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -475,8 +294,7 @@ class MainWindow(QtWidgets.QMainWindow):
             scaled_pixmap = pixmap.scaled(
                 self.original_image_label.width(),
                 self.original_image_label.height(),
-                QtCore.Qt.KeepAspectRatio,
-                QtCore.Qt.SmoothTransformation
+                QtCore.Qt.KeepAspectRatio
             )
             self.original_image_label.setPixmap(scaled_pixmap)
             self.detect_image_btn.setEnabled(True)
@@ -487,7 +305,6 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.statusBar().showMessage('正在检测图片...')
-        self.setEnabled(False)
         QtWidgets.QApplication.processEvents()  # 更新UI
 
         try:
@@ -501,8 +318,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 scaled_pixmap = pixmap.scaled(
                     self.result_image_label.width(),
                     self.result_image_label.height(),
-                    QtCore.Qt.KeepAspectRatio,
-                    QtCore.Qt.SmoothTransformation
+                    QtCore.Qt.KeepAspectRatio
                 )
                 self.result_image_label.setPixmap(scaled_pixmap)
 
@@ -527,18 +343,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.statusBar().showMessage('图片检测完成')
 
                 # 添加到数据库记录
-                add_detection_record(
+                self.db_manager.add_detection_record(
                     self.user_id,
                     'image',
                     self.image_path,
                     self.image_result_path
                 )
 
+                # 刷新历史记录
+                self.load_history()
+
         except Exception as e:
             self.statusBar().showMessage(f'检测错误: {str(e)}')
             QtWidgets.QMessageBox.critical(self, '错误', f'检测过程中发生错误: {str(e)}')
-        finally:
-            self.setEnabled(True)
 
     def save_image_result(self):
         if not self.image_result_path:
@@ -555,7 +372,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 import shutil
                 shutil.copy2(self.image_result_path, save_path)
                 self.statusBar().showMessage(f'结果已保存: {os.path.basename(save_path)}')
-                QtWidgets.QMessageBox.information(self, '成功', f'图片已保存到: {save_path}')
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, '错误', f'保存失败: {str(e)}')
 
@@ -580,8 +396,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 scaled_pixmap = pixmap.scaled(
                     self.original_video_label.width(),
                     self.original_video_label.height(),
-                    QtCore.Qt.KeepAspectRatio,
-                    QtCore.Qt.SmoothTransformation
+                    QtCore.Qt.KeepAspectRatio
                 )
                 self.original_video_label.setPixmap(scaled_pixmap)
 
@@ -594,12 +409,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.video_timer.start(30)  # 约33fps
             self.is_playing = True
             self.play_video_btn.setText('暂停')
-            self.play_video_btn.setStyleSheet("background-color: #e67e22;")
         else:
             self.video_timer.stop()
             self.is_playing = False
             self.play_video_btn.setText('播放')
-            self.play_video_btn.setStyleSheet("background-color: #9b59b6;")
 
     def update_video_frame(self):
         if self.video_cap is None:
@@ -610,7 +423,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.video_timer.stop()
             self.is_playing = False
             self.play_video_btn.setText('播放')
-            self.play_video_btn.setStyleSheet("background-color: #9b59b6;")
             self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # 重置到开始
             return
 
@@ -622,8 +434,7 @@ class MainWindow(QtWidgets.QMainWindow):
         scaled_pixmap = pixmap.scaled(
             self.original_video_label.width(),
             self.original_video_label.height(),
-            QtCore.Qt.KeepAspectRatio,
-            QtCore.Qt.SmoothTransformation
+            QtCore.Qt.KeepAspectRatio
         )
         self.original_video_label.setPixmap(scaled_pixmap)
 
@@ -636,8 +447,6 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.processEvents()  # 更新UI
 
         # 在子线程中执行检测
-        from threading import Thread
-
         def video_detection_thread():
             try:
                 self.video_result_path, self.video_detection_data = self.detector.detect_video(
@@ -673,8 +482,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 scaled_pixmap = pixmap.scaled(
                     self.result_video_label.width(),
                     self.result_video_label.height(),
-                    QtCore.Qt.KeepAspectRatio,
-                    QtCore.Qt.SmoothTransformation
+                    QtCore.Qt.KeepAspectRatio
                 )
                 self.result_video_label.setPixmap(scaled_pixmap)
             cap.release()
@@ -688,12 +496,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage('视频检测完成')
 
             # 添加到数据库记录
-            add_detection_record(
+            self.db_manager.add_detection_record(
                 self.user_id,
                 'video',
                 self.video_path,
                 self.video_result_path
             )
+
+            # 刷新历史记录
+            self.load_history()
 
     def _video_detection_error(self, error_msg):
         self.setEnabled(True)
@@ -715,7 +526,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 import shutil
                 shutil.copy2(self.video_result_path, save_path)
                 self.statusBar().showMessage(f'结果视频已保存: {os.path.basename(save_path)}')
-                QtWidgets.QMessageBox.information(self, '成功', f'视频已保存到: {save_path}')
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, '错误', f'保存失败: {str(e)}')
 
@@ -730,7 +540,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.camera_timer.start(30)  # 约33fps
             self.camera_active = True
             self.start_camera_btn.setText('关闭摄像头')
-            self.start_camera_btn.setStyleSheet("background-color: #e74c3c;")
             self.detect_camera_btn.setEnabled(True)
             self.statusBar().showMessage('摄像头已开启')
         else:
@@ -741,10 +550,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.camera_cap = None
             self.camera_active = False
             self.start_camera_btn.setText('开启摄像头')
-            self.start_camera_btn.setStyleSheet("background-color: #3498db;")
             self.detect_camera_btn.setEnabled(False)
             self.detect_camera_btn.setText('开始检测')
-            self.detect_camera_btn.setStyleSheet("background-color: #4CAF50;")
             self.is_camera_detecting = False
             self.camera_label.clear()
             self.camera_label.setText('摄像头画面')
@@ -772,8 +579,7 @@ class MainWindow(QtWidgets.QMainWindow):
         scaled_pixmap = pixmap.scaled(
             self.camera_label.width(),
             self.camera_label.height(),
-            QtCore.Qt.KeepAspectRatio,
-            QtCore.Qt.SmoothTransformation
+            QtCore.Qt.KeepAspectRatio
         )
         self.camera_label.setPixmap(scaled_pixmap)
 
@@ -781,12 +587,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.is_camera_detecting = not self.is_camera_detecting
         if self.is_camera_detecting:
             self.detect_camera_btn.setText('停止检测')
-            self.detect_camera_btn.setStyleSheet("background-color: #e74c3c;")
             self.save_camera_btn.setEnabled(True)
             self.statusBar().showMessage('实时检测已开启')
         else:
             self.detect_camera_btn.setText('开始检测')
-            self.detect_camera_btn.setStyleSheet("background-color: #4CAF50;")
             self.statusBar().showMessage('实时检测已关闭')
 
     def save_camera_result(self):
@@ -807,31 +611,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if save_path:
             try:
-                # 录制5秒视频
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(save_path, fourcc, 20.0, (640, 480))
+                # 这里简化处理，实际应该录制一段时间而不是单帧
+                ret, frame = self.camera_cap.read()
+                if ret:
+                    cv2.imwrite(save_path, frame)
+                    self.statusBar().showMessage(f'摄像头画面已保存: {os.path.basename(save_path)}')
 
-                # 录制5秒
-                for _ in range(100):  # 20fps * 5秒 = 100帧
-                    ret, frame = self.camera_cap.read()
-                    if ret:
-                        if self.is_camera_detecting:
-                            results = self.detector.model(frame, conf=0.5, verbose=False)
-                            result = results[0]
-                            frame = result.plot()
-                        out.write(frame)
+                    # 添加到数据库记录
+                    self.db_manager.add_detection_record(
+                        self.user_id,
+                        'camera',
+                        '实时摄像头',
+                        save_path
+                    )
 
-                out.release()
-                self.statusBar().showMessage(f'摄像头录像已保存: {os.path.basename(save_path)}')
-                QtWidgets.QMessageBox.information(self, '成功', f'录像已保存到: {save_path}')
-
-                # 添加到数据库记录
-                add_detection_record(
-                    self.user_id,
-                    'camera',
-                    '实时摄像头',
-                    save_path
-                )
+                    # 刷新历史记录
+                    self.load_history()
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, '错误', f'保存失败: {str(e)}')
 
@@ -848,49 +643,4 @@ class MainWindow(QtWidgets.QMainWindow):
             self.video_timer.stop()
         if self.camera_timer.isActive():
             self.camera_timer.stop()
-
-        # 创建QMessageBox实例
-        msg_box = QtWidgets.QMessageBox(self)  # 指定父窗口为self，确保对话框居中显示
-        msg_box.setWindowTitle('确认退出')
-        msg_box.setText('确定要退出系统吗？')
-        msg_box.setIcon(QtWidgets.QMessageBox.Question)
-
-        # 添加自定义按钮
-        confirm_button = msg_box.addButton('确认', QtWidgets.QMessageBox.YesRole)  # 使用YesRole
-        cancel_button = msg_box.addButton('取消', QtWidgets.QMessageBox.NoRole)  # 使用NoRole
-
-        # 设置按钮样式表，鼠标悬停时变红
-        button_style = """
-            QPushButton {
-                color: black;
-                background-color: #f0f0f0;
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                padding: 5px 15px;
-            }
-            QPushButton:hover {
-                background-color: #ff0000;  /* 鼠标悬停时变为红色 */
-                color: white;               /* 文字颜色变为白色，提高对比度 */
-            }
-            QPushButton:pressed {
-                background-color: #cc0000;  /* 按钮按下时变为深红色 */
-                color: white;
-            }
-        """
-
-        confirm_button.setStyleSheet(button_style)
-        cancel_button.setStyleSheet(button_style)
-
-        # 设置默认按钮（默认选中取消）
-        msg_box.setDefaultButton(cancel_button)
-
-        # 显示消息框并等待用户响应
-        msg_box.exec_()  # 使用exec_()确保对话框模态显示
-
-        # 判断用户点击了哪个按钮
-        if msg_box.clickedButton() == confirm_button:
-            print('用户点击了确认，退出系统')
-            event.accept()  # 接受关闭事件，退出程序
-        else:
-            print('用户点击了取消，继续使用系统')
-            event.ignore()  # 忽略关闭事件，继续运行程序
+        event.accept()

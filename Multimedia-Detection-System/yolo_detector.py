@@ -154,22 +154,25 @@ class YOLODetector:
         return output_path, detection_data
 
     def _save_detection_text(self, result, txt_path):
-        """保存检测结果到文本文件:cite[2]:cite[7]"""
-        with open(txt_path, 'w') as f:
+        """保存检测结果到文本文件"""
+        with open(txt_path, 'w', encoding='utf-8') as f:
             if result.boxes is not None:
                 for box in result.boxes:
                     class_id = int(box.cls)
                     confidence = float(box.conf)
                     bbox = box.xywhn[0].cpu().numpy()  # 归一化坐标
-                    f.write(f"{class_id} {confidence} {bbox[0]} {bbox[1]} {bbox[2]} {bbox[3]}\n")
+                    class_name = self.class_names[class_id]
+                    f.write(f"{class_name} {confidence:.2f} {bbox[0]:.4f} {bbox[1]:.4f} {bbox[2]:.4f} {bbox[3]:.4f}\n")
 
     def _save_video_detection_text(self, detection_data, txt_path):
         """保存视频检测结果到文本文件"""
-        with open(txt_path, 'w') as f:
+        with open(txt_path, 'w', encoding='utf-8') as f:
             for frame_data in detection_data:
                 f.write(f"Frame {frame_data['frame']}:\n")
                 for box in frame_data['boxes']:
                     class_id = int(box[5])
                     confidence = float(box[4])
                     bbox = box[:4]  # 未归一化坐标
-                    f.write(f"  {class_id} {confidence} {bbox[0]} {bbox[1]} {bbox[2]} {bbox[3]}\n")
+                    class_name = self.class_names[class_id]
+                    f.write(
+                        f"  {class_name} {confidence:.2f} {bbox[0]:.1f} {bbox[1]:.1f} {bbox[2]:.1f} {bbox[3]:.1f}\n")
