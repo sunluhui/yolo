@@ -1,7 +1,9 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
+from database import DatabaseManager
+from config import Config
 
 
-class LoginWindow(QtWidgets.QWidget):
+class LoginWindow(QtWidgets.QDialog):
     def __init__(self, db_manager):
         super().__init__()
         self.db_manager = db_manager
@@ -9,11 +11,33 @@ class LoginWindow(QtWidgets.QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('小目标检测系统 - 登录')
-        self.setGeometry(400, 300, 400, 300)
+        self.setWindowTitle(f'{Config.WINDOW_TITLE} - 登录')
+        self.setFixedSize(800, 800)
+        self.setStyleSheet(Config.THEME_STYLE)
+
+        # 主布局
+        main_layout = QtWidgets.QVBoxLayout()
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(40, 40, 40, 40)
+
+        # 标题
+        title_label = QtWidgets.QLabel(Config.WINDOW_TITLE)
+        title_label.setAlignment(QtCore.Qt.AlignCenter)
+        title_font = QtGui.QFont()
+        title_font.setPointSize(20)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setStyleSheet("color: #007acc; margin-bottom: 30px;")
+        main_layout.addWidget(title_label)
 
         # 创建选项卡
         self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+            }
+        """)
 
         # 登录标签页
         self.login_tab = QtWidgets.QWidget()
@@ -30,128 +54,97 @@ class LoginWindow(QtWidgets.QWidget):
         self.setup_forgot_tab()
         self.tabs.addTab(self.forgot_tab, "找回密码")
 
-        # 主布局
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.tabs)
-        self.setLayout(layout)
+        main_layout.addWidget(self.tabs)
+
+        # 底部版权信息
+        copyright_label = QtWidgets.QLabel("©小目标检测系统. 版权所有")
+        copyright_label.setAlignment(QtCore.Qt.AlignCenter)
+        copyright_label.setStyleSheet("color: #666666; margin-top: 20px;")
+        main_layout.addWidget(copyright_label)
+
+        self.setLayout(main_layout)
 
     def setup_login_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setAlignment(QtCore.Qt.AlignCenter)
-
-        # 标题
-        title_label = QtWidgets.QLabel('用户登录')
-        title_label.setAlignment(QtCore.Qt.AlignCenter)
-        title_font = QtGui.QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        layout.addWidget(title_label)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
 
         # 用户名输入
-        username_layout = QtWidgets.QHBoxLayout()
         username_label = QtWidgets.QLabel('用户名:')
-        username_label.setFixedWidth(80)
         self.login_username = QtWidgets.QLineEdit()
         self.login_username.setPlaceholderText('请输入用户名')
-        username_layout.addWidget(username_label)
-        username_layout.addWidget(self.login_username)
-        layout.addLayout(username_layout)
+        layout.addWidget(username_label)
+        layout.addWidget(self.login_username)
 
         # 密码输入
-        password_layout = QtWidgets.QHBoxLayout()
         password_label = QtWidgets.QLabel('密码:')
-        password_label.setFixedWidth(80)
         self.login_password = QtWidgets.QLineEdit()
         self.login_password.setPlaceholderText('请输入密码')
         self.login_password.setEchoMode(QtWidgets.QLineEdit.Password)
-        password_layout.addWidget(password_label)
-        password_layout.addWidget(self.login_password)
-        layout.addLayout(password_layout)
+        layout.addWidget(password_label)
+        layout.addWidget(self.login_password)
 
         # 登录按钮
         self.login_btn = QtWidgets.QPushButton('登录')
         self.login_btn.clicked.connect(self.login)
+        self.login_btn.setDefault(True)
         layout.addWidget(self.login_btn)
 
         # 状态标签
         self.login_status = QtWidgets.QLabel('')
         self.login_status.setAlignment(QtCore.Qt.AlignCenter)
-        self.login_status.setStyleSheet('color: red;')
+        self.login_status.setStyleSheet('color: #d9534f;')
         layout.addWidget(self.login_status)
 
         self.login_tab.setLayout(layout)
 
     def setup_register_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setAlignment(QtCore.Qt.AlignCenter)
-
-        # 标题
-        title_label = QtWidgets.QLabel('用户注册')
-        title_label.setAlignment(QtCore.Qt.AlignCenter)
-        title_font = QtGui.QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        layout.addWidget(title_label)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
 
         # 用户名输入
-        username_layout = QtWidgets.QHBoxLayout()
         username_label = QtWidgets.QLabel('用户名:')
-        username_label.setFixedWidth(80)
         self.register_username = QtWidgets.QLineEdit()
-        self.register_username.setPlaceholderText('请输入用户名')
-        username_layout.addWidget(username_label)
-        username_layout.addWidget(self.register_username)
-        layout.addLayout(username_layout)
+        self.register_username.setPlaceholderText('请输入用户名 (至少3个字符)')
+        layout.addWidget(username_label)
+        layout.addWidget(self.register_username)
 
         # 密码输入
-        password_layout = QtWidgets.QHBoxLayout()
         password_label = QtWidgets.QLabel('密码:')
-        password_label.setFixedWidth(80)
         self.register_password = QtWidgets.QLineEdit()
-        self.register_password.setPlaceholderText('请输入密码')
+        self.register_password.setPlaceholderText('请输入密码 (至少6个字符)')
         self.register_password.setEchoMode(QtWidgets.QLineEdit.Password)
-        password_layout.addWidget(password_label)
-        password_layout.addWidget(self.register_password)
-        layout.addLayout(password_layout)
+        layout.addWidget(password_label)
+        layout.addWidget(self.register_password)
 
         # 确认密码
-        confirm_layout = QtWidgets.QHBoxLayout()
         confirm_label = QtWidgets.QLabel('确认密码:')
-        confirm_label.setFixedWidth(80)
         self.register_confirm = QtWidgets.QLineEdit()
         self.register_confirm.setPlaceholderText('请再次输入密码')
         self.register_confirm.setEchoMode(QtWidgets.QLineEdit.Password)
-        confirm_layout.addWidget(confirm_label)
-        confirm_layout.addWidget(self.register_confirm)
-        layout.addLayout(confirm_layout)
+        layout.addWidget(confirm_label)
+        layout.addWidget(self.register_confirm)
 
         # 安全问题
-        question_layout = QtWidgets.QHBoxLayout()
         question_label = QtWidgets.QLabel('安全问题:')
-        question_label.setFixedWidth(80)
         self.register_question = QtWidgets.QComboBox()
         self.register_question.addItems([
-            '你最喜欢的同性或者异性是谁？',
+            '你最喜欢的颜色是什么？',
             '你的出生城市是哪里？',
             '你的第一所学校的名字是什么？',
             '你的宠物的名字是什么？',
             '你母亲的名字是什么？'
         ])
-        question_layout.addWidget(question_label)
-        question_layout.addWidget(self.register_question)
-        layout.addLayout(question_layout)
+        layout.addWidget(question_label)
+        layout.addWidget(self.register_question)
 
         # 安全问题答案
-        answer_layout = QtWidgets.QHBoxLayout()
         answer_label = QtWidgets.QLabel('答案:')
-        answer_label.setFixedWidth(80)
         self.register_answer = QtWidgets.QLineEdit()
         self.register_answer.setPlaceholderText('请输入安全问题答案')
-        answer_layout.addWidget(answer_label)
-        answer_layout.addWidget(self.register_answer)
-        layout.addLayout(answer_layout)
+        layout.addWidget(answer_label)
+        layout.addWidget(self.register_answer)
 
         # 注册按钮
         self.register_btn = QtWidgets.QPushButton('注册')
@@ -161,33 +154,22 @@ class LoginWindow(QtWidgets.QWidget):
         # 状态标签
         self.register_status = QtWidgets.QLabel('')
         self.register_status.setAlignment(QtCore.Qt.AlignCenter)
-        self.register_status.setStyleSheet('color: red;')
+        self.register_status.setStyleSheet('color: #d9534f;')
         layout.addWidget(self.register_status)
 
         self.register_tab.setLayout(layout)
 
     def setup_forgot_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setAlignment(QtCore.Qt.AlignCenter)
-
-        # 标题
-        title_label = QtWidgets.QLabel('找回密码')
-        title_label.setAlignment(QtCore.Qt.AlignCenter)
-        title_font = QtGui.QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        layout.addWidget(title_label)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
 
         # 用户名输入
-        username_layout = QtWidgets.QHBoxLayout()
         username_label = QtWidgets.QLabel('用户名:')
-        username_label.setFixedWidth(80)
         self.forgot_username = QtWidgets.QLineEdit()
         self.forgot_username.setPlaceholderText('请输入用户名')
-        username_layout.addWidget(username_label)
-        username_layout.addWidget(self.forgot_username)
-        layout.addLayout(username_layout)
+        layout.addWidget(username_label)
+        layout.addWidget(self.forgot_username)
 
         # 获取安全问题按钮
         self.get_question_btn = QtWidgets.QPushButton('获取安全问题')
@@ -197,39 +179,32 @@ class LoginWindow(QtWidgets.QWidget):
         # 安全问题显示
         self.forgot_question = QtWidgets.QLabel('')
         self.forgot_question.setAlignment(QtCore.Qt.AlignCenter)
+        self.forgot_question.setStyleSheet(
+            'color: #5bc0de; padding: 10px; background-color: #f5f5f5; border-radius: 4px;')
         layout.addWidget(self.forgot_question)
 
         # 安全问题答案
-        answer_layout = QtWidgets.QHBoxLayout()
         answer_label = QtWidgets.QLabel('答案:')
-        answer_label.setFixedWidth(80)
         self.forgot_answer = QtWidgets.QLineEdit()
         self.forgot_answer.setPlaceholderText('请输入安全问题答案')
-        answer_layout.addWidget(answer_label)
-        answer_layout.addWidget(self.forgot_answer)
-        layout.addLayout(answer_layout)
+        layout.addWidget(answer_label)
+        layout.addWidget(self.forgot_answer)
 
         # 新密码
-        new_password_layout = QtWidgets.QHBoxLayout()
         new_password_label = QtWidgets.QLabel('新密码:')
-        new_password_label.setFixedWidth(80)
         self.forgot_new_password = QtWidgets.QLineEdit()
-        self.forgot_new_password.setPlaceholderText('请输入新密码')
+        self.forgot_new_password.setPlaceholderText('请输入新密码 (至少6个字符)')
         self.forgot_new_password.setEchoMode(QtWidgets.QLineEdit.Password)
-        new_password_layout.addWidget(new_password_label)
-        new_password_layout.addWidget(self.forgot_new_password)
-        layout.addLayout(new_password_layout)
+        layout.addWidget(new_password_label)
+        layout.addWidget(self.forgot_new_password)
 
         # 确认新密码
-        confirm_layout = QtWidgets.QHBoxLayout()
         confirm_label = QtWidgets.QLabel('确认密码:')
-        confirm_label.setFixedWidth(80)
         self.forgot_confirm = QtWidgets.QLineEdit()
         self.forgot_confirm.setPlaceholderText('请再次输入新密码')
         self.forgot_confirm.setEchoMode(QtWidgets.QLineEdit.Password)
-        confirm_layout.addWidget(confirm_label)
-        confirm_layout.addWidget(self.forgot_confirm)
-        layout.addLayout(confirm_layout)
+        layout.addWidget(confirm_label)
+        layout.addWidget(self.forgot_confirm)
 
         # 重置密码按钮
         self.reset_btn = QtWidgets.QPushButton('重置密码')
@@ -240,7 +215,7 @@ class LoginWindow(QtWidgets.QWidget):
         # 状态标签
         self.forgot_status = QtWidgets.QLabel('')
         self.forgot_status.setAlignment(QtCore.Qt.AlignCenter)
-        self.forgot_status.setStyleSheet('color: red;')
+        self.forgot_status.setStyleSheet('color: #d9534f;')
         layout.addWidget(self.forgot_status)
 
         self.forgot_tab.setLayout(layout)
@@ -354,4 +329,4 @@ class LoginWindow(QtWidgets.QWidget):
             self.forgot_status.setText('密码重置失败')
 
     def accept_login(self):
-        self.close()
+        self.accept()

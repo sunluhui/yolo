@@ -1,11 +1,12 @@
 import sqlite3
 import hashlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime
+from config import Config
 
 
 class DatabaseManager:
-    def __init__(self, db_path='users.db'):
+    def __init__(self, db_path=Config.DB_PATH):
         self.db_path = db_path
         self.init_database()
 
@@ -17,6 +18,11 @@ class DatabaseManager:
 
     def init_database(self):
         """初始化数据库表"""
+        # 创建结果目录
+        os.makedirs(Config.IMAGE_RESULTS_DIR, exist_ok=True)
+        os.makedirs(Config.VIDEO_RESULTS_DIR, exist_ok=True)
+        os.makedirs(Config.CAMERA_RESULTS_DIR, exist_ok=True)
+
         conn = self.get_connection()
         cursor = conn.cursor()
 
@@ -50,7 +56,7 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_records_user_id ON detection_records(user_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_records_detection_time ON detection_records(detection_time)')
 
-        # 插入默认管理员用户（可选）
+        # 插入默认管理员用户
         try:
             hashed_password = self.hash_password('admin123')
             hashed_answer = self.hash_password('blue')
@@ -163,33 +169,15 @@ class DatabaseManager:
         """获取用户的检测记录，并转换为本地时间"""
         conn = self.get_connection()
         cursor = conn.cursor()
+
+        # 使用SQLite的datetime函数转换时区
         cursor.execute(
-            """SELECT detection_type, source_path, result_path, detection_time 
+            """SELECT detection_type, source_path, result_path, 
+               datetime(detection_time, 'localtime') as local_detection_time
             FROM detection_records WHERE user_id = ? ORDER BY detection_time DESC""",
             (user_id,)
         )
+
         records = cursor.fetchall()
         conn.close()
-
-        # 将UTC时间转换为本地时间
-        local_records = []
-        for record in records:
-            detection_type, source_path, result_path, detection_time = record
-
-            # 如果detection_time是字符串，转换为datetime对象
-            if isinstance(detection_time, str):
-                # 处理SQLite返回的时间格式
-                if '.' in detection_time:  # 包含毫秒
-                    utc_time = datetime.strptime(detection_time, "%Y-%m-%d %H:%M:%S.%f")
-                else:
-                    utc_time = datetime.strptime(detection_time, "%Y-%m-%d %H:%M:%S")
-            else:
-                utc_time = detection_time
-
-            # 转换为本地时间
-            local_time = utc_time.replace(tzinfo=timezone.utc).astimezone(tz=None)
-            local_time_str = local_time.strftime("%Y-%m-%d %H:%M:%S")
-
-            local_records.append((detection_type, source_path, result_path, local_time_str))
-
-        return local_records
+        return records

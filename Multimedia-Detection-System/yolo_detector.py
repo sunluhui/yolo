@@ -3,15 +3,16 @@ import numpy as np
 from ultralytics import YOLO
 import os
 from datetime import datetime
+from config import Config
 
 
 class YOLODetector:
-    def __init__(self, model_path='yolov8n.pt'):
+    def __init__(self, model_path=Config.MODEL_PATH):
         """初始化YOLO检测器"""
         self.model = YOLO(model_path)
         self.class_names = self.model.names
 
-    def detect_image(self, image_path, save_dir='results/images', confidence=0.5):
+    def detect_image(self, image_path, save_dir=Config.IMAGE_RESULTS_DIR, confidence=Config.CONFIDENCE_THRESHOLD):
         """检测单张图片并保存结果"""
         # 创建保存目录
         os.makedirs(save_dir, exist_ok=True)
@@ -35,7 +36,7 @@ class YOLODetector:
 
         return output_path, result
 
-    def detect_video(self, video_path, save_dir='results/videos', confidence=0.5):
+    def detect_video(self, video_path, save_dir=Config.VIDEO_RESULTS_DIR, confidence=Config.CONFIDENCE_THRESHOLD):
         """检测视频并保存结果"""
         os.makedirs(save_dir, exist_ok=True)
 
@@ -92,7 +93,8 @@ class YOLODetector:
 
         return output_path, detection_data
 
-    def detect_camera(self, camera_index=0, save_dir='results/camera', confidence=0.5, max_frames=100):
+    def detect_camera(self, camera_index=0, save_dir=Config.CAMERA_RESULTS_DIR, confidence=Config.CONFIDENCE_THRESHOLD,
+                      max_frames=300):
         """从摄像头实时检测并保存结果"""
         os.makedirs(save_dir, exist_ok=True)
 
@@ -113,6 +115,9 @@ class YOLODetector:
 
         # 获取视频属性
         fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30  # 默认帧率
+
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
