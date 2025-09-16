@@ -318,7 +318,7 @@ class RegisterDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle('用户注册')
         self.setModal(True)
-        self.setFixedSize(550, 600)  # 增加高度以适应新的布局
+        self.setFixedSize(800, 800)  # 增加高度以适应新的布局
         self.init_ui()
 
     def init_ui(self):
@@ -641,7 +641,7 @@ class ForgotPasswordDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle('找回密码')
         self.setModal(True)
-        self.setFixedSize(550, 600)  # 增加高度以适应新的布局
+        self.setFixedSize(800, 800)  # 增加高度以适应新的布局
         self.username = None
         self.init_ui()
 
