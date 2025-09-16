@@ -19,7 +19,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle(f'多媒体检测系统 - 欢迎 {self.username}')
+        self.setWindowTitle(f'小目标检测系统 - 欢迎 {self.username}')
         self.setGeometry(100, 100, 1200, 800)
 
         # 中央部件

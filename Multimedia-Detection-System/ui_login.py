@@ -272,8 +272,8 @@ class LoginWindow(QtWidgets.QWidget):
             self.register_status.setText('用户名和密码不能为空')
             return
 
-        if len(username) < 3:
-            self.register_status.setText('用户名至少3个字符')
+        if len(username) < 2:
+            self.register_status.setText('用户名至少2个字符')
             return
 
         if len(password) < 6:
