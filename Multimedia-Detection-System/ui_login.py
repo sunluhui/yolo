@@ -259,6 +259,76 @@ class LoginWindow(QtWidgets.QDialog):
             '你的宠物的名字是什么？',
             '你母亲的名字是什么？'
         ])
+
+        # 设置下拉菜单样式
+        self.register_question.setStyleSheet("""
+            QComboBox {
+                background-color: white;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 12px;
+                font-size: 14px;
+                min-height: 40px;
+                color: #2c3e50;
+                font-family: Microsoft YaHei;
+            }
+            QComboBox:hover {
+                border: 2px solid #3498db;
+                background-color: #f8f9fa;
+            }
+            QComboBox:focus {
+                border: 2px solid #3498db;
+                background-color: #eaf2f8;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 30px;
+                border-left-width: 1px;
+                border-left-color: #bdc3c7;
+                border-left-style: solid;
+                border-top-right-radius: 8px;
+                border-bottom-right-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f8f9fa, stop:1 #e9ecef);
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 7px solid #6c757d;
+                width: 0;
+                height: 0;
+                margin-right: 10px;
+            }
+            QComboBox QAbstractItemView {
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                background-color: white;
+                selection-background-color: #3498db;
+                selection-color: white;
+                outline: none;
+                padding: 5px;
+                margin: 0px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border-bottom: 1px solid #e9ecef;
+                color: #2c3e50;
+                font-family: Microsoft YaHei;
+                font-size: 14px;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #3498db;
+                color: white;
+                border-radius: 4px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #e9ecef;
+                color: #2c3e50;
+                border-radius: 4px;
+            }
+        """)
+
         layout.addWidget(question_label)
         layout.addWidget(self.register_question)
 
@@ -266,6 +336,9 @@ class LoginWindow(QtWidgets.QDialog):
         answer_label = QtWidgets.QLabel('答案:')
         self.register_answer = QtWidgets.QLineEdit()
         self.register_answer.setPlaceholderText('请输入安全问题答案')
+
+        # 为答案标签添加上边距
+        answer_label.setContentsMargins(0, 15, 0, 0)  # 上边距15像素
         layout.addWidget(answer_label)
         layout.addWidget(self.register_answer)
 
