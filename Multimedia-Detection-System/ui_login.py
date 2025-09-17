@@ -23,21 +23,25 @@ class LoginWindow(QtWidgets.QDialog):
         main_layout.setSpacing(25)  # 增加间距
         main_layout.setContentsMargins(50, 50, 50, 40)  # 增加边距
 
-        # 标题
+        # 标题 - 增大字体并美化
+        title_label = QtWidgets.QLabel("小目标检测系统")
+        title_label.setObjectName("mainTitle")  # 设置对象名称以应用样式
+        title_label.setAlignment(QtCore.Qt.AlignCenter)
         title_label = QtWidgets.QLabel(Config.WINDOW_TITLE)
         title_label.setAlignment(QtCore.Qt.AlignCenter)
         title_font = QtGui.QFont()
-        title_font.setFamily("Microsoft YaHei")  # 使用更现代的字体
-        title_font.setPointSize(24)
+        title_font.setFamily("Microsoft YaHei")
+        title_font.setPointSize(32)  # 增大字体
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setStyleSheet("""
-            color: #2c3e50;
-            padding: 15px;
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3498db, stop:1 #2c3e50);
-            border-radius: 10px;
-            margin-bottom: 20px;
-        """)
+                    color: white;
+                    padding: 20px;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3498db, stop:1 #2c3e50);
+                    border-radius: 15px;
+                    margin-bottom: 30px;
+                    border: 2px solid #2980b9;
+                """)
         main_layout.addWidget(title_label)
 
         # 创建选项卡
