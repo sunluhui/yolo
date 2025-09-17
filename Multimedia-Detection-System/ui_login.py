@@ -57,7 +57,7 @@ class LoginWindow(QtWidgets.QDialog):
         main_layout.addWidget(self.tabs)
 
         # 底部版权信息
-        copyright_label = QtWidgets.QLabel("©小目标检测系统. 版权所有")
+        copyright_label = QtWidgets.QLabel("©小目标检测系统.版权所有")
         copyright_label.setAlignment(QtCore.Qt.AlignCenter)
         copyright_label.setStyleSheet("color: #666666; margin-top: 20px;")
         main_layout.addWidget(copyright_label)
