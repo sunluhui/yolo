@@ -12,42 +12,71 @@ class LoginWindow(QtWidgets.QDialog):
 
     def init_ui(self):
         self.setWindowTitle(f'{Config.WINDOW_TITLE} - 登录')
-        self.setFixedSize(800, 800)
-        self.setStyleSheet(Config.THEME_STYLE)
+        self.setFixedSize(950, 950)  # 稍微增加窗口尺寸
+        self.setStyleSheet(self.get_enhanced_style())
+
+        # 设置窗口图标
+        self.setWindowIcon(QtGui.QIcon('icon.png'))  # 如果有图标文件的话
 
         # 主布局
         main_layout = QtWidgets.QVBoxLayout()
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(40, 40, 40, 40)
+        main_layout.setSpacing(25)  # 增加间距
+        main_layout.setContentsMargins(50, 50, 50, 40)  # 增加边距
 
         # 标题
         title_label = QtWidgets.QLabel(Config.WINDOW_TITLE)
         title_label.setAlignment(QtCore.Qt.AlignCenter)
         title_font = QtGui.QFont()
-        title_font.setPointSize(20)
+        title_font.setFamily("Microsoft YaHei")  # 使用更现代的字体
+        title_font.setPointSize(24)
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #007acc; margin-bottom: 30px;")
+        title_label.setStyleSheet("""
+            color: #2c3e50;
+            padding: 15px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3498db, stop:1 #2c3e50);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        """)
         main_layout.addWidget(title_label)
 
         # 创建选项卡
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setStyleSheet("""
             QTabWidget::pane {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
+                border: 2px solid #bdc3c7;
+                background-color: #ecf0f1;
+                border-radius: 8px;
+                margin-top: 10px;
+            }
+            QTabBar::tab {
+                background: #95a5a6;
+                color: white;
+                padding: 12px 24px;
+                border: 1px solid #7f8c8d;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                margin-right: 4px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498db, stop:1 #2980b9);
+                border-bottom: 2px solid #3498db;
+            }
+            QTabBar::tab:hover:!selected {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #34495e, stop:1 #2c3e50);
             }
         """)
 
         # 登录标签页
         self.login_tab = QtWidgets.QWidget()
         self.setup_login_tab()
-        self.tabs.addTab(self.login_tab, "登录")
+        self.tabs.addTab(self.login_tab, "用户登录")
 
         # 注册标签页
         self.register_tab = QtWidgets.QWidget()
         self.setup_register_tab()
-        self.tabs.addTab(self.register_tab, "注册")
+        self.tabs.addTab(self.register_tab, "新用户注册")
 
         # 找回密码标签页
         self.forgot_tab = QtWidgets.QWidget()
@@ -57,43 +86,136 @@ class LoginWindow(QtWidgets.QDialog):
         main_layout.addWidget(self.tabs)
 
         # 底部版权信息
-        copyright_label = QtWidgets.QLabel("©小目标检测系统.版权所有")
+        copyright_label = QtWidgets.QLabel("© 现代化 小目标检测系统. 版权所有")
         copyright_label.setAlignment(QtCore.Qt.AlignCenter)
-        copyright_label.setStyleSheet("color: #666666; margin-top: 20px;")
+        copyright_label.setStyleSheet("""
+            color: #7f8c8d;
+            margin-top: 20px;
+            font-size: 12px;
+        """)
         main_layout.addWidget(copyright_label)
 
         self.setLayout(main_layout)
 
+    def get_enhanced_style(self):
+        """返回增强的样式表"""
+        return """
+            QMainWindow, QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ecf0f1, stop:1 #bdc3c7);
+            }
+            QLabel {
+                color: #2c3e50;
+                font-family: Microsoft YaHei;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #eaf2f8;
+            }
+            QLineEdit:hover {
+                border: 2px solid #3498db;
+            }
+            QComboBox {
+                background-color: white;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 14px;
+                min-height: 30px;
+            }
+            QComboBox:hover {
+                border: 2px solid #3498db;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 25px;
+                border-left-width: 1px;
+                border-left-color: #bdc3c7;
+                border-left-style: solid;
+                border-top-right-radius: 8px;
+                border-bottom-right-radius: 8px;
+            }
+            QComboBox::down-arrow {
+                image: url(down_arrow.png);
+                width: 12px;
+                height: 12px;
+            }
+            QComboBox QAbstractItemView {
+                border: 2px solid #3498db;
+                selection-background-color: #3498db;
+                background-color: white;
+            }
+        """
+
     def setup_login_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
 
         # 用户名输入
         username_label = QtWidgets.QLabel('用户名:')
         self.login_username = QtWidgets.QLineEdit()
-        self.login_username.setPlaceholderText('请输入用户名')
+        self.login_username.setPlaceholderText('请输入您的用户名')
         layout.addWidget(username_label)
         layout.addWidget(self.login_username)
 
         # 密码输入
         password_label = QtWidgets.QLabel('密码:')
         self.login_password = QtWidgets.QLineEdit()
-        self.login_password.setPlaceholderText('请输入密码')
+        self.login_password.setPlaceholderText('请输入您的密码')
         self.login_password.setEchoMode(QtWidgets.QLineEdit.Password)
         layout.addWidget(password_label)
         layout.addWidget(self.login_password)
 
         # 登录按钮
-        self.login_btn = QtWidgets.QPushButton('登录')
+        self.login_btn = QtWidgets.QPushButton('登 录')
         self.login_btn.clicked.connect(self.login)
         self.login_btn.setDefault(True)
+        self.login_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.login_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498db, stop:1 #2980b9);
+                color: white;
+                border: none;
+                padding: 12px;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5dade2, stop:1 #3498db);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c3e50, stop:1 #34495e);
+                padding: 11px;
+            }
+            QPushButton:disabled {
+                background: #bdc3c7;
+                color: #7f8c8d;
+            }
+        """)
         layout.addWidget(self.login_btn)
 
         # 状态标签
         self.login_status = QtWidgets.QLabel('')
         self.login_status.setAlignment(QtCore.Qt.AlignCenter)
-        self.login_status.setStyleSheet('color: #d9534f;')
+        self.login_status.setStyleSheet("""
+            color: #e74c3c;
+            background-color: #fadbd8;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #e74c3c;
+        """)
         layout.addWidget(self.login_status)
 
         self.login_tab.setLayout(layout)
@@ -101,7 +223,7 @@ class LoginWindow(QtWidgets.QDialog):
     def setup_register_tab(self):
         layout = QtWidgets.QVBoxLayout()
         layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(30, 30, 30, 30)
 
         # 用户名输入
         username_label = QtWidgets.QLabel('用户名:')
@@ -147,14 +269,39 @@ class LoginWindow(QtWidgets.QDialog):
         layout.addWidget(self.register_answer)
 
         # 注册按钮
-        self.register_btn = QtWidgets.QPushButton('注册')
+        self.register_btn = QtWidgets.QPushButton('注 册')
         self.register_btn.clicked.connect(self.register)
+        self.register_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.register_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2ecc71, stop:1 #27ae60);
+                color: white;
+                border: none;
+                padding: 12px;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #58d68d, stop:1 #2ecc71);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #239b56, stop:1 #1e8449);
+                padding: 11px;
+            }
+        """)
         layout.addWidget(self.register_btn)
 
         # 状态标签
         self.register_status = QtWidgets.QLabel('')
         self.register_status.setAlignment(QtCore.Qt.AlignCenter)
-        self.register_status.setStyleSheet('color: #d9534f;')
+        self.register_status.setStyleSheet("""
+            color: #e74c3c;
+            background-color: #fadbd8;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #e74c3c;
+        """)
         layout.addWidget(self.register_status)
 
         self.register_tab.setLayout(layout)
@@ -162,7 +309,7 @@ class LoginWindow(QtWidgets.QDialog):
     def setup_forgot_tab(self):
         layout = QtWidgets.QVBoxLayout()
         layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(30, 30, 30, 30)
 
         # 用户名输入
         username_label = QtWidgets.QLabel('用户名:')
@@ -174,13 +321,37 @@ class LoginWindow(QtWidgets.QDialog):
         # 获取安全问题按钮
         self.get_question_btn = QtWidgets.QPushButton('获取安全问题')
         self.get_question_btn.clicked.connect(self.get_security_question)
+        self.get_question_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.get_question_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f39c12, stop:1 #e67e22);
+                color: white;
+                border: none;
+                padding: 10px;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f4d03f, stop:1 #f39c12);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #d35400, stop:1 #e67e22);
+                padding: 9px;
+            }
+        """)
         layout.addWidget(self.get_question_btn)
 
         # 安全问题显示
         self.forgot_question = QtWidgets.QLabel('')
         self.forgot_question.setAlignment(QtCore.Qt.AlignCenter)
-        self.forgot_question.setStyleSheet(
-            'color: #5bc0de; padding: 10px; background-color: #f5f5f5; border-radius: 4px;')
+        self.forgot_question.setStyleSheet("""
+            color: #16a085;
+            background-color: #d1f2eb;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #16a085;
+            font-weight: bold;
+        """)
         layout.addWidget(self.forgot_question)
 
         # 安全问题答案
@@ -210,12 +381,41 @@ class LoginWindow(QtWidgets.QDialog):
         self.reset_btn = QtWidgets.QPushButton('重置密码')
         self.reset_btn.clicked.connect(self.reset_password)
         self.reset_btn.setEnabled(False)
+        self.reset_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.reset_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #9b59b6, stop:1 #8e44ad);
+                color: white;
+                border: none;
+                padding: 12px;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #bb8fce, stop:1 #9b59b6);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6c3483, stop:1 #8e44ad);
+                padding: 11px;
+            }
+            QPushButton:disabled {
+                background: #bdc3c7;
+                color: #7f8c8d;
+            }
+        """)
         layout.addWidget(self.reset_btn)
 
         # 状态标签
         self.forgot_status = QtWidgets.QLabel('')
         self.forgot_status.setAlignment(QtCore.Qt.AlignCenter)
-        self.forgot_status.setStyleSheet('color: #d9534f;')
+        self.forgot_status.setStyleSheet("""
+            color: #e74c3c;
+            background-color: #fadbd8;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #e74c3c;
+        """)
         layout.addWidget(self.forgot_status)
 
         self.forgot_tab.setLayout(layout)
