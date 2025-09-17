@@ -6,6 +6,11 @@ from threading import Thread
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    # 定义信号
+    progress_updated = QtCore.pyqtSignal(int)
+    error_occurred = QtCore.pyqtSignal(str)
+    detection_finished = QtCore.pyqtSignal()
+
     def __init__(self, user_id, username, db_manager, detector):
         super().__init__()
         self.user_id = user_id
@@ -18,8 +23,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.camera_active = False
         self.init_ui()
 
+        self.progress_updated.connect(self.update_video_progress)
+        self.error_occurred.connect(self._video_detection_error)
+        self.detection_finished.connect(self._video_detection_finished)
+
+        self.init_ui()
+
     def init_ui(self):
-        self.setWindowTitle(f'多媒体检测系统 - 欢迎 {self.username}')
+        self.setWindowTitle(f'小目标检测系统 - 欢迎 {self.username}')
         self.setGeometry(100, 100, 1200, 800)
 
         # 中央部件
@@ -177,6 +188,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.video_timer.timeout.connect(self.update_video_frame)
         self.video_cap = None
 
+        # 进度对话框
+        self.progress_dialog = None
+
     def setup_camera_tab(self):
         layout = QtWidgets.QVBoxLayout(self.camera_tab)
 
@@ -228,6 +242,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.camera_timer.timeout.connect(self.update_camera_frame)
         self.camera_cap = None
         self.is_camera_detecting = False
+        self.is_recording = False
+        self.video_writer = None
 
     def setup_history_tab(self):
         layout = QtWidgets.QVBoxLayout(self.history_tab)
@@ -443,30 +459,73 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.statusBar().showMessage('正在检测视频，这可能需要一些时间...')
-        self.setEnabled(False)  # 禁用界面防止重复操作
-        QtWidgets.QApplication.processEvents()  # 更新UI
+        self.setEnabled(False)
+        QtWidgets.QApplication.processEvents()
+
+        # 创建进度对话框
+        self.progress_dialog = QtWidgets.QProgressDialog("处理视频中...", "取消", 0, 100, self)
+        self.progress_dialog.setWindowTitle("视频检测")
+        self.progress_dialog.setWindowModality(QtCore.Qt.WindowModal)
+        self.progress_dialog.canceled.connect(self.cancel_video_detection)
+        self.progress_dialog.show()
 
         # 在子线程中执行检测
         def video_detection_thread():
             try:
+                # 进度回调函数
+                def progress_callback(progress, error_msg=None):
+                    if error_msg is not None:
+                        # 使用信号发射错误信息
+                        self.error_occurred.emit(error_msg)
+                    else:
+                        # 使用信号发射进度信息
+                        self.progress_updated.emit(progress)
+
                 self.video_result_path, self.video_detection_data = self.detector.detect_video(
-                    self.video_path
+                    self.video_path, progress_callback=progress_callback
                 )
 
                 # 回到主线程更新UI
-                QtCore.QMetaObject.invokeMethod(self, '_video_detection_finished',
-                                                QtCore.Qt.QueuedConnection)
+                self.detection_finished.emit()
+
             except Exception as e:
                 error_msg = str(e)
-                QtCore.QMetaObject.invokeMethod(self, '_video_detection_error',
-                                                QtCore.Qt.QueuedConnection,
-                                                QtCore.Q_ARG(str, error_msg))
+                # 使用信号发射错误信息
+                self.error_occurred.emit(error_msg)
 
         self.detection_thread = Thread(target=video_detection_thread)
         self.detection_thread.daemon = True
         self.detection_thread.start()
 
+    def cancel_video_detection(self):
+        # 设置取消标志，需要在Detector类中添加相应的取消机制
+        self.statusBar().showMessage('视频检测已取消')
+        self.setEnabled(True)
+        self.progress_dialog.close()
+
+    def update_video_progress(self, progress_value):
+        """更新视频处理进度
+        Args:
+            progress_value (int): 进度值 (0-100)
+        """
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            self.progress_dialog.setValue(progress_value)
+        self.statusBar().showMessage(f'视频处理进度: {progress_value}%')
+
+    def _video_detection_error(self, error_message):
+        """处理视频检测错误
+        Args:
+            error_message (str): 错误信息
+        """
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            self.progress_dialog.close()
+        self.setEnabled(True)
+        self.statusBar().showMessage(f'视频检测错误: {error_message}')
+        QtWidgets.QMessageBox.critical(self, '错误', f'视频检测过程中发生错误: {error_message}')
+
     def _video_detection_finished(self):
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            self.progress_dialog.close()
         self.setEnabled(True)
 
         if self.video_result_path:
@@ -489,7 +548,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # 显示检测信息
             if self.video_detection_data:
-                total_objects = sum(len(frame['boxes']) for frame in self.video_detection_data)
+                total_objects = sum(len(frame_data['boxes']) for frame_data in self.video_detection_data)
                 self.video_info_label.setText(f"视频检测完成，共检测到 {total_objects} 个对象")
 
             self.save_video_btn.setEnabled(True)
@@ -506,10 +565,6 @@ class MainWindow(QtWidgets.QMainWindow):
             # 刷新历史记录
             self.load_history()
 
-    def _video_detection_error(self, error_msg):
-        self.setEnabled(True)
-        self.statusBar().showMessage(f'视频检测错误: {error_msg}')
-        QtWidgets.QMessageBox.critical(self, '错误', f'视频检测过程中发生错误: {error_msg}')
 
     def save_video_result(self):
         if not self.video_result_path:
@@ -542,16 +597,29 @@ class MainWindow(QtWidgets.QMainWindow):
             self.start_camera_btn.setText('关闭摄像头')
             self.detect_camera_btn.setEnabled(True)
             self.statusBar().showMessage('摄像头已开启')
+
+            # 初始化录像相关变量
+            self.is_recording = False
+            self.video_writer = None
         else:
             # 关闭摄像头
             self.camera_timer.stop()
             if self.camera_cap:
                 self.camera_cap.release()
                 self.camera_cap = None
+
+            # 如果正在录制，停止录制
+            if self.is_recording and self.video_writer:
+                self.video_writer.release()
+                self.video_writer = None
+                self.is_recording = False
+
             self.camera_active = False
             self.start_camera_btn.setText('开启摄像头')
             self.detect_camera_btn.setEnabled(False)
             self.detect_camera_btn.setText('开始检测')
+            self.save_camera_btn.setEnabled(False)
+            self.save_camera_btn.setText('保存录像')
             self.is_camera_detecting = False
             self.camera_label.clear()
             self.camera_label.setText('摄像头画面')
@@ -565,12 +633,34 @@ class MainWindow(QtWidgets.QMainWindow):
         if not ret:
             return
 
+        # 如果正在检测，执行目标检测
         if self.is_camera_detecting:
-            # 进行实时检测
             results = self.detector.model(frame, conf=0.5, verbose=False)
             result = results[0]
             frame = result.plot()
 
+            # 更新检测信息
+            if result.boxes is not None:
+                num_objects = len(result.boxes)
+                class_counts = {}
+                for box in result.boxes:
+                    class_id = int(box.cls)
+                    class_name = self.detector.class_names[class_id]
+                    class_counts[class_name] = class_counts.get(class_name, 0) + 1
+
+                info_text = f"检测到 {num_objects} 个对象: "
+                for class_name, count in class_counts.items():
+                    info_text += f"{class_name}: {count}个 "
+
+                self.camera_info_label.setText(info_text)
+            else:
+                self.camera_info_label.setText("未检测到任何对象")
+
+        # 如果正在录制，写入帧
+        if self.is_recording and self.video_writer:
+            self.video_writer.write(frame)
+
+        # 显示帧
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame.shape
         bytes_per_line = ch * w
@@ -597,41 +687,58 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.camera_active:
             return
 
-        self.statusBar().showMessage('正在保存摄像头录像...')
-        QtWidgets.QApplication.processEvents()  # 更新UI
+        if not self.is_recording:
+            # 开始录制
+            self.is_recording = True
+            self.save_camera_btn.setText('停止录制')
+            self.statusBar().showMessage('开始录制摄像头画面...')
 
-        # 停止摄像头临时停止录制
-        self.camera_timer.stop()
+            # 获取摄像头属性
+            fps = int(self.camera_cap.get(cv2.CAP_PROP_FPS))
+            if fps == 0:  # 如果无法获取FPS，使用默认值
+                fps = 30
 
-        save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, '保存摄像头录像',
-            f"camera_recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4",
-            'MP4视频 (*.mp4);;AVI视频 (*.avi)'
-        )
+            width = int(self.camera_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(self.camera_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        if save_path:
-            try:
-                # 这里简化处理，实际应该录制一段时间而不是单帧
-                ret, frame = self.camera_cap.read()
-                if ret:
-                    cv2.imwrite(save_path, frame)
-                    self.statusBar().showMessage(f'摄像头画面已保存: {os.path.basename(save_path)}')
+            # 创建输出目录
+            output_dir = "camera_recordings"
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
 
-                    # 添加到数据库记录
-                    self.db_manager.add_detection_record(
-                        self.user_id,
-                        'camera',
-                        '实时摄像头',
-                        save_path
-                    )
+            # 生成输出文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = os.path.join(output_dir, f"recording_{timestamp}.mp4")
 
-                    # 刷新历史记录
-                    self.load_history()
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, '错误', f'保存失败: {str(e)}')
+            # 创建视频写入器
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-        # 重新开启摄像头
-        self.camera_timer.start(30)
+            # 保存输出路径
+            self.camera_result_path = output_path
+
+        else:
+            # 停止录制
+            self.is_recording = False
+            self.save_camera_btn.setText('保存录像')
+            self.statusBar().showMessage('录制已停止')
+
+            if self.video_writer:
+                self.video_writer.release()
+                self.video_writer = None
+
+            # 添加到数据库记录
+            self.db_manager.add_detection_record(
+                self.user_id,
+                'camera',
+                '实时摄像头',
+                self.camera_result_path
+            )
+
+            # 刷新历史记录
+            self.load_history()
+
+            QtWidgets.QMessageBox.information(self, '成功', f'录像已保存: {os.path.basename(self.camera_result_path)}')
 
     def closeEvent(self, event):
         # 清理资源
