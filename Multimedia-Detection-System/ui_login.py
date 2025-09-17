@@ -24,9 +24,6 @@ class LoginWindow(QtWidgets.QDialog):
         main_layout.setContentsMargins(50, 50, 50, 40)  # 增加边距
 
         # 标题 - 增大字体并美化
-        title_label = QtWidgets.QLabel("小目标检测系统")
-        title_label.setObjectName("mainTitle")  # 设置对象名称以应用样式
-        title_label.setAlignment(QtCore.Qt.AlignCenter)
         title_label = QtWidgets.QLabel(Config.WINDOW_TITLE)
         title_label.setAlignment(QtCore.Qt.AlignCenter)
         title_font = QtGui.QFont()
@@ -35,13 +32,13 @@ class LoginWindow(QtWidgets.QDialog):
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setStyleSheet("""
-                    color: white;
-                    padding: 20px;
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3498db, stop:1 #2c3e50);
-                    border-radius: 15px;
-                    margin-bottom: 30px;
-                    border: 2px solid #2980b9;
-                """)
+            color: white;
+            padding: 20px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3498db, stop:1 #2c3e50);
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 2px solid #2980b9;
+        """)
         main_layout.addWidget(title_label)
 
         # 创建选项卡
@@ -534,3 +531,18 @@ class LoginWindow(QtWidgets.QDialog):
 
     def accept_login(self):
         self.accept()
+
+    def closeEvent(self, event):
+        """重写关闭事件，确认退出"""
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            '确认退出',
+            '您确定要退出系统吗？',
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No
+        )
+
+        if reply == QtWidgets.QMessageBox.Yes:
+            event.accept()  # 接受关闭事件
+        else:
+            event.ignore()  # 忽略关闭事件
