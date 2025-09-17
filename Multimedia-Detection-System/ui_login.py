@@ -106,7 +106,7 @@ class LoginWindow(QtWidgets.QDialog):
         # 用户名输入
         username_label = QtWidgets.QLabel('用户名:')
         self.register_username = QtWidgets.QLineEdit()
-        self.register_username.setPlaceholderText('请输入用户名 (至少3个字符)')
+        self.register_username.setPlaceholderText('请输入用户名 (至少2个字符)')
         layout.addWidget(username_label)
         layout.addWidget(self.register_username)
 
@@ -225,7 +225,7 @@ class LoginWindow(QtWidgets.QDialog):
         password = self.login_password.text().strip()
 
         if not username or not password:
-            self.login_status.setText('用户名和密码不能为空')
+            self.login_status.setText('用户名和密码不能为空！')
             return
 
         user = self.db_manager.verify_user(username, password)
@@ -234,7 +234,7 @@ class LoginWindow(QtWidgets.QDialog):
             self.login_status.setText('登录成功!')
             QtCore.QTimer.singleShot(500, self.accept_login)
         else:
-            self.login_status.setText('用户名或密码错误')
+            self.login_status.setText('用户名或密码错误！')
 
     def register(self):
         username = self.register_username.text().strip()
@@ -244,34 +244,34 @@ class LoginWindow(QtWidgets.QDialog):
         answer = self.register_answer.text().strip()
 
         if not username or not password:
-            self.register_status.setText('用户名和密码不能为空')
+            self.register_status.setText('用户名和密码不能为空！')
             return
 
         if len(username) < 2:
-            self.register_status.setText('用户名至少2个字符')
+            self.register_status.setText('用户名至少2个字符！')
             return
 
         if len(password) < 6:
-            self.register_status.setText('密码至少6个字符')
+            self.register_status.setText('密码至少6个字符！')
             return
 
         if password != confirm:
-            self.register_status.setText('两次输入的密码不一致')
+            self.register_status.setText('两次输入的密码不一致！')
             return
 
         if not answer:
-            self.register_status.setText('安全问题答案不能为空')
+            self.register_status.setText('安全问题答案不能为空！')
             return
 
         if self.db_manager.register_user(username, password, question, answer):
-            self.register_status.setText('注册成功，请登录')
+            self.register_status.setText('注册成功，请登录！')
             # 清空表单
             self.register_username.clear()
             self.register_password.clear()
             self.register_confirm.clear()
             self.register_answer.clear()
         else:
-            self.register_status.setText('用户名已存在')
+            self.register_status.setText('用户名已存在！')
 
     def get_security_question(self):
         username = self.forgot_username.text().strip()
@@ -288,7 +288,7 @@ class LoginWindow(QtWidgets.QDialog):
         else:
             self.forgot_question.setText('')
             self.reset_btn.setEnabled(False)
-            self.forgot_status.setText('用户名不存在')
+            self.forgot_status.setText('用户名不存在！')
 
     def reset_password(self):
         username = self.forgot_username.text().strip()
@@ -317,7 +317,7 @@ class LoginWindow(QtWidgets.QDialog):
             return
 
         if self.db_manager.reset_password(username, new_password):
-            self.forgot_status.setText('密码重置成功，请登录')
+            self.forgot_status.setText('密码重置成功，请登录！')
             # 清空表单
             self.forgot_username.clear()
             self.forgot_answer.clear()
@@ -326,7 +326,7 @@ class LoginWindow(QtWidgets.QDialog):
             self.forgot_question.setText('')
             self.reset_btn.setEnabled(False)
         else:
-            self.forgot_status.setText('密码重置失败')
+            self.forgot_status.setText('密码重置失败！')
 
     def accept_login(self):
         self.accept()

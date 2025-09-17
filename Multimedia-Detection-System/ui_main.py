@@ -30,7 +30,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle(f'小目标检测系统 - 欢迎 {self.username}')
+        self.setWindowTitle(f'小目标检测系统 - 欢迎 {self.username}使用！')
         self.setGeometry(100, 100, 1200, 800)
 
         # 中央部件
@@ -112,7 +112,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(image_layout)
 
         # 检测信息
-        self.image_info_label = QtWidgets.QLabel('检测信息将显示在这里')
+        self.image_info_label = QtWidgets.QLabel('检测信息将显示在这里！')
         self.image_info_label.setAlignment(QtCore.Qt.AlignLeft)
         self.image_info_label.setWordWrap(True)
         layout.addWidget(self.image_info_label)
@@ -172,7 +172,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(video_layout)
 
         # 检测信息
-        self.video_info_label = QtWidgets.QLabel('检测信息将显示在这里')
+        self.video_info_label = QtWidgets.QLabel('检测信息将显示在这里！')
         self.video_info_label.setAlignment(QtCore.Qt.AlignLeft)
         self.video_info_label.setWordWrap(True)
         layout.addWidget(self.video_info_label)
