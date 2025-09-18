@@ -72,17 +72,17 @@ class LoginWindow(QtWidgets.QDialog):
         # 登录标签页
         self.login_tab = QtWidgets.QWidget()
         self.setup_login_tab()
-        self.tabs.addTab(self.login_tab, "用户登录")
+        self.tabs.addTab(self.login_tab, "🔐用户登录")
 
         # 注册标签页
         self.register_tab = QtWidgets.QWidget()
         self.setup_register_tab()
-        self.tabs.addTab(self.register_tab, "新用户注册")
+        self.tabs.addTab(self.register_tab, "👤新用户注册")
 
         # 找回密码标签页
         self.forgot_tab = QtWidgets.QWidget()
         self.setup_forgot_tab()
-        self.tabs.addTab(self.forgot_tab, "找回密码")
+        self.tabs.addTab(self.forgot_tab, "🔓找回密码")
 
         main_layout.addWidget(self.tabs)
 
