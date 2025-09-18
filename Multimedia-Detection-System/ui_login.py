@@ -971,7 +971,7 @@ class LoginWindow(QtWidgets.QDialog):
                 padding: 12px;
                 border-radius: 10px;
                 font-weight: bold;
-                font-size: 16px;
+                font-size: 15px;
                 margin-top: 10px;
             }
             QPushButton:hover {
