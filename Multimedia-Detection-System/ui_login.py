@@ -160,66 +160,176 @@ class LoginWindow(QtWidgets.QDialog):
 
     def setup_login_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(25)  # 增加间距
+        layout.setContentsMargins(40, 40, 40, 30)  # 调整边距
 
-        # 用户名输入
-        username_label = QtWidgets.QLabel('用户名:')
+        # 用户名输入 - 优化设计
+        username_container = QtWidgets.QWidget()
+        username_container.setStyleSheet("background: transparent;")
+        username_layout = QtWidgets.QVBoxLayout(username_container)
+        username_layout.setContentsMargins(0, 0, 0, 0)
+        username_layout.setSpacing(8)
+
+        username_label = QtWidgets.QLabel('用户名：')
+        username_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.login_username = QtWidgets.QLineEdit()
         self.login_username.setPlaceholderText('请输入您的用户名')
-        layout.addWidget(username_label)
-        layout.addWidget(self.login_username)
+        self.login_username.setMinimumHeight(45)
+        self.login_username.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 密码输入
-        password_label = QtWidgets.QLabel('密码:')
+        username_layout.addWidget(username_label)
+        username_layout.addWidget(self.login_username)
+        layout.addWidget(username_container)
+
+        # 密码输入 - 优化设计
+        password_container = QtWidgets.QWidget()
+        password_container.setStyleSheet("background: transparent;")
+        password_layout = QtWidgets.QVBoxLayout(password_container)
+        password_layout.setContentsMargins(0, 0, 0, 0)
+        password_layout.setSpacing(8)
+
+        password_label = QtWidgets.QLabel('密码：')
+        password_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.login_password = QtWidgets.QLineEdit()
         self.login_password.setPlaceholderText('请输入您的密码')
         self.login_password.setEchoMode(QtWidgets.QLineEdit.Password)
-        layout.addWidget(password_label)
-        layout.addWidget(self.login_password)
+        self.login_password.setMinimumHeight(45)
+        self.login_password.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 登录按钮
+        # 添加显示/隐藏密码按钮
+        toggle_password_btn = QtWidgets.QToolButton()
+        toggle_password_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        toggle_password_btn.setText("👁")
+        toggle_password_btn.setStyleSheet("""
+            QToolButton {
+                background: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+                color: #718096;
+            }
+            QToolButton:hover {
+                color: #3498db;
+            }
+        """)
+        toggle_password_btn.clicked.connect(
+            lambda: self.toggle_password_visibility(self.login_password, toggle_password_btn))
+
+        # 创建带按钮的密码框
+        password_with_button = QtWidgets.QHBoxLayout()
+        password_with_button.addWidget(self.login_password)
+        password_with_button.addWidget(toggle_password_btn)
+        password_with_button.setContentsMargins(0, 0, 0, 0)
+
+        password_layout.addWidget(password_label)
+        password_layout.addLayout(password_with_button)
+        layout.addWidget(password_container)
+
+        # 登录按钮 - 保持原有样式，但调整上边距
         self.login_btn = QtWidgets.QPushButton('登 录')
         self.login_btn.clicked.connect(self.login)
         self.login_btn.setDefault(True)
         self.login_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.login_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498db, stop:1 #2980b9);
-                color: white;
-                border: none;
-                padding: 12px;
-                border-radius: 8px;
-                font-weight: bold;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5dade2, stop:1 #3498db);
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c3e50, stop:1 #34495e);
-                padding: 11px;
-            }
-            QPushButton:disabled {
-                background: #bdc3c7;
-                color: #7f8c8d;
-            }
-        """)
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3498db, stop:1 #2980b9);
+                    color: white;
+                    border: none;
+                    padding: 15px;
+                    border-radius: 10px;
+                    font-weight: bold;
+                    font-size: 16px;
+                    margin-top: 10px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5dade2, stop:1 #3498db);
+                }
+                QPushButton:pressed {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2c3e50, stop:1 #34495e);
+                    padding: 14px;
+                }
+                QPushButton:disabled {
+                    background: #e2e8f0;
+                    color: #a0aec0;
+                }
+            """)
         layout.addWidget(self.login_btn)
 
-        # 状态标签
+        # 状态标签 - 微调样式
         self.login_status = QtWidgets.QLabel('')
         self.login_status.setAlignment(QtCore.Qt.AlignCenter)
         self.login_status.setStyleSheet("""
-            color: #e74c3c;
-            background-color: #fadbd8;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #e74c3c;
-        """)
+                QLabel {
+                    color: #e53e3e;
+                    background-color: #fed7d7;
+                    padding: 12px;
+                    border-radius: 8px;
+                    border: 1px solid #feb2b2;
+                    font-size: 13px;
+                    margin-top: 10px;
+                }
+            """)
         layout.addWidget(self.login_status)
 
         self.login_tab.setLayout(layout)
+
+    def toggle_password_visibility(self, password_field, toggle_button):
+        if password_field.echoMode() == QtWidgets.QLineEdit.Password:
+            password_field.setEchoMode(QtWidgets.QLineEdit.Normal)
+            toggle_button.setText("🔒")
+        else:
+            password_field.setEchoMode(QtWidgets.QLineEdit.Password)
+            toggle_button.setText("👁")
 
     def setup_register_tab(self):
         layout = QtWidgets.QVBoxLayout()
