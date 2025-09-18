@@ -333,34 +333,207 @@ class LoginWindow(QtWidgets.QDialog):
 
     def setup_register_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setSpacing(15)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(15)  # 增加间距
+        layout.setContentsMargins(20, 20, 20, 30)  # 调整边距
 
-        # 用户名输入
-        username_label = QtWidgets.QLabel('用户名:')
+        # 用户名输入 - 优化设计
+        username_container = QtWidgets.QWidget()
+        username_container.setStyleSheet("background: transparent;")
+        username_layout = QtWidgets.QVBoxLayout(username_container)
+        username_layout.setContentsMargins(0, 0, 0, 0)
+        username_layout.setSpacing(8)
+
+        username_label = QtWidgets.QLabel('用户名')
+        username_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.register_username = QtWidgets.QLineEdit()
         self.register_username.setPlaceholderText('请输入用户名 (至少2个字符)')
-        layout.addWidget(username_label)
-        layout.addWidget(self.register_username)
+        self.register_username.setMinimumHeight(45)
+        self.register_username.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 密码输入
-        password_label = QtWidgets.QLabel('密码:')
+        username_layout.addWidget(username_label)
+        username_layout.addWidget(self.register_username)
+        layout.addWidget(username_container)
+
+        # 密码输入 - 添加显示/隐藏按钮
+        password_container = QtWidgets.QWidget()
+        password_container.setStyleSheet("background: transparent;")
+        password_layout = QtWidgets.QVBoxLayout(password_container)
+        password_layout.setContentsMargins(0, 0, 0, 0)
+        password_layout.setSpacing(8)
+
+        password_label = QtWidgets.QLabel('密码')
+        password_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.register_password = QtWidgets.QLineEdit()
         self.register_password.setPlaceholderText('请输入密码 (至少6个字符)')
         self.register_password.setEchoMode(QtWidgets.QLineEdit.Password)
-        layout.addWidget(password_label)
-        layout.addWidget(self.register_password)
+        self.register_password.setMinimumHeight(45)
+        self.register_password.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 确认密码
-        confirm_label = QtWidgets.QLabel('确认密码:')
+        # 添加显示/隐藏密码按钮
+        toggle_password_btn = QtWidgets.QToolButton()
+        toggle_password_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        toggle_password_btn.setText("👁")
+        toggle_password_btn.setStyleSheet("""
+            QToolButton {
+                background: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+                color: #718096;
+            }
+            QToolButton:hover {
+                color: #3498db;
+            }
+        """)
+        toggle_password_btn.clicked.connect(
+            lambda: self.toggle_password_visibility(self.register_password, toggle_password_btn))
+
+        # 创建带按钮的密码框
+        password_with_button = QtWidgets.QHBoxLayout()
+        password_with_button.addWidget(self.register_password)
+        password_with_button.addWidget(toggle_password_btn)
+        password_with_button.setContentsMargins(0, 0, 0, 0)
+
+        password_layout.addWidget(password_label)
+        password_layout.addLayout(password_with_button)
+        layout.addWidget(password_container)
+
+        # 确认密码 - 添加显示/隐藏按钮
+        confirm_container = QtWidgets.QWidget()
+        confirm_container.setStyleSheet("background: transparent;")
+        confirm_layout = QtWidgets.QVBoxLayout(confirm_container)
+        confirm_layout.setContentsMargins(0, 0, 0, 0)
+        confirm_layout.setSpacing(8)
+
+        confirm_label = QtWidgets.QLabel('确认密码')
+        confirm_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.register_confirm = QtWidgets.QLineEdit()
         self.register_confirm.setPlaceholderText('请再次输入密码')
         self.register_confirm.setEchoMode(QtWidgets.QLineEdit.Password)
-        layout.addWidget(confirm_label)
-        layout.addWidget(self.register_confirm)
+        self.register_confirm.setMinimumHeight(45)
+        self.register_confirm.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
+
+        # 添加显示/隐藏密码按钮
+        toggle_confirm_btn = QtWidgets.QToolButton()
+        toggle_confirm_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        toggle_confirm_btn.setText("👁")
+        toggle_confirm_btn.setStyleSheet("""
+            QToolButton {
+                background: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+                color: #718096;
+            }
+            QToolButton:hover {
+                color: #3498db;
+            }
+        """)
+        toggle_confirm_btn.clicked.connect(
+            lambda: self.toggle_password_visibility(self.register_confirm, toggle_confirm_btn))
+
+        # 创建带按钮的确认密码框
+        confirm_with_button = QtWidgets.QHBoxLayout()
+        confirm_with_button.addWidget(self.register_confirm)
+        confirm_with_button.addWidget(toggle_confirm_btn)
+        confirm_with_button.setContentsMargins(0, 0, 0, 0)
+
+        confirm_layout.addWidget(confirm_label)
+        confirm_layout.addLayout(confirm_with_button)
+        layout.addWidget(confirm_container)
 
         # 安全问题
-        question_label = QtWidgets.QLabel('安全问题:')
+        question_container = QtWidgets.QWidget()
+        question_container.setStyleSheet("background: transparent;")
+        question_layout = QtWidgets.QVBoxLayout(question_container)
+        question_layout.setContentsMargins(0, 0, 0, 0)
+        question_layout.setSpacing(8)
+
+        question_label = QtWidgets.QLabel('安全问题')
+        question_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.register_question = QtWidgets.QComboBox()
         self.register_question.addItems([
             '你最喜欢的颜色是什么？',
@@ -369,46 +542,38 @@ class LoginWindow(QtWidgets.QDialog):
             '你的宠物的名字是什么？',
             '你母亲的名字是什么？'
         ])
-
-        # 设置下拉菜单样式
+        self.register_question.setMinimumHeight(45)
         self.register_question.setStyleSheet("""
             QComboBox {
                 background-color: white;
-                border: 2px solid #bdc3c7;
-                border-radius: 8px;
-                padding: 12px;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 0px 15px;
                 font-size: 14px;
-                min-height: 40px;
                 color: #2c3e50;
-                font-family: Microsoft YaHei;
-            }
-            QComboBox:hover {
-                border: 2px solid #3498db;
-                background-color: #f8f9fa;
             }
             QComboBox:focus {
                 border: 2px solid #3498db;
-                background-color: #eaf2f8;
+                background-color: #f8fafd;
+            }
+            QComboBox:hover {
+                border: 2px solid #a0aec0;
             }
             QComboBox::drop-down {
                 subcontrol-origin: padding;
                 subcontrol-position: top right;
                 width: 30px;
-                border-left-width: 1px;
-                border-left-color: #bdc3c7;
-                border-left-style: solid;
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f8f9fa, stop:1 #e9ecef);
+                border-left: 1px solid #e0e6ed;
+                border-top-right-radius: 10px;
+                border-bottom-right-radius: 10px;
             }
             QComboBox::down-arrow {
                 image: none;
                 border-left: 5px solid transparent;
                 border-right: 5px solid transparent;
-                border-top: 7px solid #6c757d;
+                border-top: 7px solid #718096;
                 width: 0;
                 height: 0;
-                margin-right: 10px;
             }
             QComboBox QAbstractItemView {
                 border: 2px solid #3498db;
@@ -418,41 +583,67 @@ class LoginWindow(QtWidgets.QDialog):
                 selection-color: white;
                 outline: none;
                 padding: 5px;
-                margin: 0px;
             }
             QComboBox QAbstractItemView::item {
                 padding: 8px 12px;
                 border-bottom: 1px solid #e9ecef;
                 color: #2c3e50;
-                font-family: Microsoft YaHei;
-                font-size: 14px;
             }
             QComboBox QAbstractItemView::item:selected {
                 background-color: #3498db;
                 color: white;
                 border-radius: 4px;
             }
-            QComboBox QAbstractItemView::item:hover {
-                background-color: #e9ecef;
+        """)
+
+        question_layout.addWidget(question_label)
+        question_layout.addWidget(self.register_question)
+        layout.addWidget(question_container)
+
+        # 安全问题答案
+        answer_container = QtWidgets.QWidget()
+        answer_container.setStyleSheet("background: transparent;")
+        answer_layout = QtWidgets.QVBoxLayout(answer_container)
+        answer_layout.setContentsMargins(0, 0, 0, 0)
+        answer_layout.setSpacing(8)
+
+        answer_label = QtWidgets.QLabel('答案')
+        answer_label.setStyleSheet("""
+            QLabel {
                 color: #2c3e50;
-                border-radius: 4px;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
             }
         """)
 
-        layout.addWidget(question_label)
-        layout.addWidget(self.register_question)
-
-        # 安全问题答案
-        answer_label = QtWidgets.QLabel('答案:')
         self.register_answer = QtWidgets.QLineEdit()
         self.register_answer.setPlaceholderText('请输入安全问题答案')
+        self.register_answer.setMinimumHeight(45)
+        self.register_answer.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 为答案标签添加上边距
-        answer_label.setContentsMargins(0, 15, 0, 0)  # 上边距15像素
-        layout.addWidget(answer_label)
-        layout.addWidget(self.register_answer)
+        answer_layout.addWidget(answer_label)
+        answer_layout.addWidget(self.register_answer)
+        layout.addWidget(answer_container)
 
-        # 注册按钮
+        # 注册按钮 - 保持原有样式，但调整上边距
         self.register_btn = QtWidgets.QPushButton('注 册')
         self.register_btn.clicked.connect(self.register)
         self.register_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
@@ -461,30 +652,35 @@ class LoginWindow(QtWidgets.QDialog):
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2ecc71, stop:1 #27ae60);
                 color: white;
                 border: none;
-                padding: 12px;
-                border-radius: 8px;
+                padding: 15px;
+                border-radius: 10px;
                 font-weight: bold;
                 font-size: 16px;
+                margin-top: 10px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #58d68d, stop:1 #2ecc71);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #239b56, stop:1 #1e8449);
-                padding: 11px;
+                padding: 14px;
             }
         """)
         layout.addWidget(self.register_btn)
 
-        # 状态标签
+        # 状态标签 - 微调样式
         self.register_status = QtWidgets.QLabel('')
         self.register_status.setAlignment(QtCore.Qt.AlignCenter)
         self.register_status.setStyleSheet("""
-            color: #e74c3c;
-            background-color: #fadbd8;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #e74c3c;
+            QLabel {
+                color: #e53e3e;
+                background-color: #fed7d7;
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid #feb2b2;
+                font-size: 13px;
+                margin-top: 10px;
+            }
         """)
         layout.addWidget(self.register_status)
 
