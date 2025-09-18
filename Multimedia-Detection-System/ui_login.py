@@ -688,28 +688,66 @@ class LoginWindow(QtWidgets.QDialog):
 
     def setup_forgot_tab(self):
         layout = QtWidgets.QVBoxLayout()
-        layout.setSpacing(15)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(10)  # 增加间距
+        layout.setContentsMargins(20, 20, 20, 30)  # 调整边距
 
-        # 用户名输入
-        username_label = QtWidgets.QLabel('用户名:')
+        # 用户名输入 - 优化设计
+        username_container = QtWidgets.QWidget()
+        username_container.setStyleSheet("background: transparent;")
+        username_layout = QtWidgets.QVBoxLayout(username_container)
+        username_layout.setContentsMargins(0, 0, 0, 0)
+        username_layout.setSpacing(8)
+
+        username_label = QtWidgets.QLabel('用户名')
+        username_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.forgot_username = QtWidgets.QLineEdit()
         self.forgot_username.setPlaceholderText('请输入用户名')
-        layout.addWidget(username_label)
-        layout.addWidget(self.forgot_username)
+        self.forgot_username.setMinimumHeight(45)
+        self.forgot_username.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 获取安全问题按钮
+        username_layout.addWidget(username_label)
+        username_layout.addWidget(self.forgot_username)
+        layout.addWidget(username_container)
+
+        # 获取安全问题按钮 - 调整样式
         self.get_question_btn = QtWidgets.QPushButton('获取安全问题')
         self.get_question_btn.clicked.connect(self.get_security_question)
         self.get_question_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.get_question_btn.setMinimumHeight(40)
         self.get_question_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f39c12, stop:1 #e67e22);
                 color: white;
                 border: none;
                 padding: 10px;
-                border-radius: 6px;
+                border-radius: 8px;
                 font-weight: bold;
+                font-size: 14px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f4d03f, stop:1 #f39c12);
@@ -721,56 +759,220 @@ class LoginWindow(QtWidgets.QDialog):
         """)
         layout.addWidget(self.get_question_btn)
 
-        # 安全问题显示
+        # 安全问题显示 - 微调样式
         self.forgot_question = QtWidgets.QLabel('')
         self.forgot_question.setAlignment(QtCore.Qt.AlignCenter)
         self.forgot_question.setStyleSheet("""
-            color: #16a085;
-            background-color: #d1f2eb;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #16a085;
-            font-weight: bold;
+            QLabel {
+                color: #0d9488;
+                background-color: #ccfbf1;
+                padding: 14px;
+                border-radius: 8px;
+                border: 1px solid #0d9488;
+                font-weight: bold;
+                font-size: 13px;
+                margin: 5px 0;
+            }
         """)
         layout.addWidget(self.forgot_question)
 
-        # 安全问题答案
-        answer_label = QtWidgets.QLabel('答案:')
+        # 安全问题答案 - 优化设计
+        answer_container = QtWidgets.QWidget()
+        answer_container.setStyleSheet("background: transparent;")
+        answer_layout = QtWidgets.QVBoxLayout(answer_container)
+        answer_layout.setContentsMargins(0, 0, 0, 0)
+        answer_layout.setSpacing(8)
+
+        answer_label = QtWidgets.QLabel('答案')
+        answer_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.forgot_answer = QtWidgets.QLineEdit()
         self.forgot_answer.setPlaceholderText('请输入安全问题答案')
-        layout.addWidget(answer_label)
-        layout.addWidget(self.forgot_answer)
+        self.forgot_answer.setMinimumHeight(45)
+        self.forgot_answer.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 新密码
-        new_password_label = QtWidgets.QLabel('新密码:')
+        answer_layout.addWidget(answer_label)
+        answer_layout.addWidget(self.forgot_answer)
+        layout.addWidget(answer_container)
+
+        # 新密码 - 添加显示/隐藏按钮
+        new_password_container = QtWidgets.QWidget()
+        new_password_container.setStyleSheet("background: transparent;")
+        new_password_layout = QtWidgets.QVBoxLayout(new_password_container)
+        new_password_layout.setContentsMargins(0, 0, 0, 0)
+        new_password_layout.setSpacing(8)
+
+        new_password_label = QtWidgets.QLabel('新密码')
+        new_password_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.forgot_new_password = QtWidgets.QLineEdit()
         self.forgot_new_password.setPlaceholderText('请输入新密码 (至少6个字符)')
         self.forgot_new_password.setEchoMode(QtWidgets.QLineEdit.Password)
-        layout.addWidget(new_password_label)
-        layout.addWidget(self.forgot_new_password)
+        self.forgot_new_password.setMinimumHeight(45)
+        self.forgot_new_password.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 确认新密码
-        confirm_label = QtWidgets.QLabel('确认密码:')
+        # 添加显示/隐藏密码按钮
+        toggle_new_password_btn = QtWidgets.QToolButton()
+        toggle_new_password_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        toggle_new_password_btn.setText("👁")
+        toggle_new_password_btn.setStyleSheet("""
+            QToolButton {
+                background: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+                color: #718096;
+            }
+            QToolButton:hover {
+                color: #3498db;
+            }
+        """)
+        toggle_new_password_btn.clicked.connect(
+            lambda: self.toggle_password_visibility(self.forgot_new_password, toggle_new_password_btn))
+
+        # 创建带按钮的密码框
+        new_password_with_button = QtWidgets.QHBoxLayout()
+        new_password_with_button.addWidget(self.forgot_new_password)
+        new_password_with_button.addWidget(toggle_new_password_btn)
+        new_password_with_button.setContentsMargins(0, 0, 0, 0)
+
+        new_password_layout.addWidget(new_password_label)
+        new_password_layout.addLayout(new_password_with_button)
+        layout.addWidget(new_password_container)
+
+        # 确认新密码 - 添加显示/隐藏按钮
+        confirm_container = QtWidgets.QWidget()
+        confirm_container.setStyleSheet("background: transparent;")
+        confirm_layout = QtWidgets.QVBoxLayout(confirm_container)
+        confirm_layout.setContentsMargins(0, 0, 0, 0)
+        confirm_layout.setSpacing(8)
+
+        confirm_label = QtWidgets.QLabel('确认密码')
+        confirm_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 14px;
+                padding-left: 5px;
+            }
+        """)
+
         self.forgot_confirm = QtWidgets.QLineEdit()
         self.forgot_confirm.setPlaceholderText('请再次输入新密码')
         self.forgot_confirm.setEchoMode(QtWidgets.QLineEdit.Password)
-        layout.addWidget(confirm_label)
-        layout.addWidget(self.forgot_confirm)
+        self.forgot_confirm.setMinimumHeight(45)
+        self.forgot_confirm.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #e0e6ed;
+                border-radius: 10px;
+                padding: 12px 15px;
+                font-size: 14px;
+                color: #2c3e50;
+                selection-background-color: #3498db;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+                background-color: #f8fafd;
+            }
+            QLineEdit:hover {
+                border: 2px solid #a0aec0;
+            }
+        """)
 
-        # 重置密码按钮
+        # 添加显示/隐藏密码按钮
+        toggle_confirm_btn = QtWidgets.QToolButton()
+        toggle_confirm_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        toggle_confirm_btn.setText("👁")
+        toggle_confirm_btn.setStyleSheet("""
+            QToolButton {
+                background: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+                color: #718096;
+            }
+            QToolButton:hover {
+                color: #3498db;
+            }
+        """)
+        toggle_confirm_btn.clicked.connect(
+            lambda: self.toggle_password_visibility(self.forgot_confirm, toggle_confirm_btn))
+
+        # 创建带按钮的确认密码框
+        confirm_with_button = QtWidgets.QHBoxLayout()
+        confirm_with_button.addWidget(self.forgot_confirm)
+        confirm_with_button.addWidget(toggle_confirm_btn)
+        confirm_with_button.setContentsMargins(0, 0, 0, 0)
+
+        confirm_layout.addWidget(confirm_label)
+        confirm_layout.addLayout(confirm_with_button)
+        layout.addWidget(confirm_container)
+
+        # 重置密码按钮 - 调整样式
         self.reset_btn = QtWidgets.QPushButton('重置密码')
         self.reset_btn.clicked.connect(self.reset_password)
         self.reset_btn.setEnabled(False)
         self.reset_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.reset_btn.setMinimumHeight(45)
         self.reset_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #9b59b6, stop:1 #8e44ad);
                 color: white;
                 border: none;
                 padding: 12px;
-                border-radius: 8px;
+                border-radius: 10px;
                 font-weight: bold;
                 font-size: 16px;
+                margin-top: 10px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #bb8fce, stop:1 #9b59b6);
@@ -780,21 +982,25 @@ class LoginWindow(QtWidgets.QDialog):
                 padding: 11px;
             }
             QPushButton:disabled {
-                background: #bdc3c7;
-                color: #7f8c8d;
+                background: #e2e8f0;
+                color: #a0aec0;
             }
         """)
         layout.addWidget(self.reset_btn)
 
-        # 状态标签
+        # 状态标签 - 微调样式
         self.forgot_status = QtWidgets.QLabel('')
         self.forgot_status.setAlignment(QtCore.Qt.AlignCenter)
         self.forgot_status.setStyleSheet("""
-            color: #e74c3c;
-            background-color: #fadbd8;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #e74c3c;
+            QLabel {
+                color: #e53e3e;
+                background-color: #fed7d7;
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid #feb2b2;
+                font-size: 13px;
+                margin-top: 10px;
+            }
         """)
         layout.addWidget(self.forgot_status)
 
