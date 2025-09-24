@@ -491,25 +491,6 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        # 替换第497行附近的代码：
-        if isinstance(x, tuple):
-            # 调试信息
-            print(f"警告: 接收到元组，包含 {len(x)} 个元素")
-
-            # 尝试找到合适的张量
-            for i, item in enumerate(x):
-                if hasattr(item, 'view') and hasattr(item, 'shape'):
-                    print(f"使用元组中第 {i} 个元素，形状: {item.shape}")
-                    x = item
-                    break
-            else:
-                # 如果没找到合适的张量，取第一个并尝试转换
-                x = x[0]
-
-        # 确保x是张量
-        if not hasattr(x, 'view'):
-            raise ValueError(f"x必须是张量，但实际类型是: {type(x)}")
-
         return x.view(x.shape[0], self.no, -1)
 
     def _generate_anchors(self, shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
