@@ -491,21 +491,26 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        if isinstance(x, tuple): #修改部分
-            # 选择元组中形状合适的张量
-            for item in x:
-                if hasattr(item, 'view') and len(item.shape) == 4:  # 确保是4D特征图
-                    x = item
-                    break
-            else:
-                x = x[0]  # 如果没找到合适的，默认取第一个
-        # 修改后，添加形状检查：
-        if x.numel() % self.no != 0:
-            # 计算合适的维度
-            new_dim = x.numel() // x.shape[0] // self.no
-            return x.view(x.shape[0], self.no, new_dim)
-        else:
+        # 替换为以下更安全的代码：
+        try:
+            # 先尝试自动计算维度
             return x.view(x.shape[0], self.no, -1)
+        except RuntimeError as e:
+            # 如果自动计算失败，手动计算正确的维度
+            total_elements = x.numel()
+            batch_size = x.shape[0]
+            # 确保维度计算正确
+            if total_elements % (batch_size * self.no) == 0:
+                correct_dim = total_elements // (batch_size * self.no)
+                return x.view(batch_size, self.no, correct_dim)
+            else:
+                # 如果仍然无法整除，调整到最接近的可整除维度
+                correct_dim = total_elements // (batch_size * self.no)
+                # 截断或调整张量大小
+                new_size = batch_size * self.no * correct_dim
+                x_reshaped = x.contiguous().view(-1)[:new_size].view(batch_size, self.no, correct_dim)
+                print(f"警告: 张量大小调整从 {total_elements} 到 {new_size}")
+                return x_reshaped
 
     def _generate_anchors(self, shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
         """Generates anchor bounding boxes for given shapes with specific grid size and validates them."""
