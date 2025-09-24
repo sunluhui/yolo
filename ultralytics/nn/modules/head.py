@@ -491,7 +491,7 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        if isinstance(x, tuple):
+        if isinstance(x, tuple): #修改部分
             # 选择元组中形状合适的张量
             for item in x:
                 if hasattr(item, 'view') and len(item.shape) == 4:  # 确保是4D特征图
