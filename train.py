@@ -1,7 +1,7 @@
 from ultralytics import YOLO, RTDETR
 
 # 加载配置
-model = RTDETR(model='yolov8-rtdetr.yaml', task='detect')
+model = RTDETR(model='yolov8-rtdetr.yaml')#, task='detect')
 model.info()
 model.model.use_dn = False
 # 训练参数
