@@ -491,6 +491,10 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
+        # 修改后：
+        if isinstance(x, tuple):
+            # 如果是元组，取第一个元素（通常是主要的特征图）
+            x = x[0]
         return x.view(x.shape[0], self.no, -1)
 
     def _generate_anchors(self, shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
