@@ -499,7 +499,13 @@ class RTDETRDecoder(nn.Module):
                     break
             else:
                 x = x[0]  # 如果没找到合适的，默认取第一个
-        return x.view(x.shape[0], self.no, -1)
+        # 修改后，添加形状检查：
+        if x.numel() % self.no != 0:
+            # 计算合适的维度
+            new_dim = x.numel() // x.shape[0] // self.no
+            return x.view(x.shape[0], self.no, new_dim)
+        else:
+            return x.view(x.shape[0], self.no, -1)
 
     def _generate_anchors(self, shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
         """Generates anchor bounding boxes for given shapes with specific grid size and validates them."""
