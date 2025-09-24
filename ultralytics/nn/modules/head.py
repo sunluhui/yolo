@@ -491,13 +491,21 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        # 直接替换为：
         if isinstance(x, tuple):
-            # 取元组的第一个元素（通常是主特征图）
-            x = x[0]
-        elif not hasattr(x, 'view'):
-            # 确保x是张量
-            raise ValueError(f"Expected tensor, got {type(x)}")
+            # 如果是元组，尝试找到合适的张量
+            for i, item in enumerate(x):
+                if hasattr(item, 'view') and hasattr(item, 'shape'):
+                    print(f"DEBUG: Using tuple item {i} with shape {item.shape}")
+                    x = item
+                    break
+            else:
+                # 如果没找到合适的张量，使用第一个元素
+                x = x[0]
+                print(f"DEBUG: Using first tuple item, type = {type(x)}")
+
+        # 确保x是张量
+        if not hasattr(x, 'view'):
+            raise ValueError(f"x must be a tensor, but got {type(x)}")
 
         return x.view(x.shape[0], self.no, -1)
 
