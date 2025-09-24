@@ -492,7 +492,13 @@ class RTDETRDecoder(nn.Module):
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
         if isinstance(x, tuple):
-            x = x[0]  # 取元组的第一个元素（通常是主特征图）
+            # 选择元组中形状合适的张量
+            for item in x:
+                if hasattr(item, 'view') and len(item.shape) == 4:  # 确保是4D特征图
+                    x = item
+                    break
+            else:
+                x = x[0]  # 如果没找到合适的，默认取第一个
         return x.view(x.shape[0], self.no, -1)
 
     def _generate_anchors(self, shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
