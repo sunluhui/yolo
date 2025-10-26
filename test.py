@@ -1,12 +1,12 @@
 from ultralytics import YOLO
 
 # 加载训练好的模型
-model = YOLO('runs/detect/train289/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
+model = YOLO('runs/detect/train305/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
 
 # 在测试集上进行评估
 metrics = model.val(
-    data='coco.yaml',  # 数据集配置文件路径
-    split='val',  # 指定使用测试集
+    data='VisDrone.yaml',  # 数据集配置文件路径
+    split='test',  # 指定使用测试集
 )
 
 # 输出评估指标
