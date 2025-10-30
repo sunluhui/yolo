@@ -11,14 +11,14 @@ class MultiBranchAttention(nn.Module):
         self.branches = nn.ModuleList()
 
         # 分支1: 通道注意力
-        #self.branches.append(ChannelAttention(in_channels, reduction_ratio))
+        self.branches.append(ChannelAttention(in_channels, reduction_ratio))
 
         # 分支2: 空间注意力
-        #self.branches.append(SpatialAttention())
+        self.branches.append(SpatialAttention())
 
         # 分支3: 局部上下文注意力 (不同感受野)
-        #for k in kernel_sizes:
-            #self.branches.append(LocalContextAttention(in_channels, k))
+        for k in kernel_sizes:
+            self.branches.append(LocalContextAttention(in_channels, k))
 
         # 分支4: 全局上下文注意力
         self.branches.append(GlobalContextAttention(in_channels))
@@ -31,26 +31,28 @@ class MultiBranchAttention(nn.Module):
         )
 
         # 门控机制
-        self.gate = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channels, in_channels // reduction_ratio, 1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels // reduction_ratio, len(self.branches), 1),
-            nn.Softmax(dim=1)
-        )
+        #self.gate = nn.Sequential(
+            #nn.AdaptiveAvgPool2d(1),
+            #nn.Conv2d(in_channels, in_channels // reduction_ratio, 1),
+            #nn.ReLU(),
+            #nn.Conv2d(in_channels // reduction_ratio, len(self.branches), 1),
+            #nn.Softmax(dim=1)
+        #)
 
     def forward(self, x):
         branch_outputs = [branch(x) for branch in self.branches]
 
+        fused = torch.cat(branch_outputs, dim=1)  # 做消融：去掉上面的门控机制代码和下面的门控加权代码，保留本行和return代码。
+
         # 门控加权
-        gate_weights = self.gate(x)  # [B, num_branches, 1, 1]
-        weighted_outputs = []
-        for i, out in enumerate(branch_outputs):
-            weight = gate_weights[:, i:i + 1]  # [B, 1, 1, 1]
-            weighted_outputs.append(out * weight)
+        #gate_weights = self.gate(x)  # [B, num_branches, 1, 1]
+        #weighted_outputs = []
+        #for i, out in enumerate(branch_outputs):
+            #weight = gate_weights[:, i:i + 1]  # [B, 1, 1, 1]
+            #weighted_outputs.append(out * weight)
 
         # 特征融合
-        fused = torch.cat(weighted_outputs, dim=1)
+        #fused = torch.cat(weighted_outputs, dim=1)
         return self.fusion(fused) + x  # 残差连接
 
 
