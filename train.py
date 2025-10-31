@@ -4,7 +4,7 @@ from ultralytics import YOLO
 model = YOLO(model='yolov8-CoordAtt.yaml', task='detect')
 
 # 训练参数
-model.val(
+model.train(
     data='VisDrone.yaml',  # 数据集配置文件
     epochs=20,
     imgsz=640,
