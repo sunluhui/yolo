@@ -1037,7 +1037,7 @@ class CA_RFA_SPPF(nn.Module):
         self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
 
         # 自适应参数
-        self.alpha = nn.Parameter(torch.tensor(0.5))  # 注意力融合系数0.7
+        self.alpha = nn.Parameter(torch.tensor(0.9))  # 注意力融合系数0.7
 
     def forward(self, x):
         # 原始输入保留
