@@ -155,7 +155,7 @@ class KeypointLoss(nn.Module):
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
 
 
-class RTDETRLoss(nn.Module):  #新的损失函数
+class RTDETRLoss(nn.Module):
     """Criterion class for computing training losses for RTDETR object detection."""
 
     def __init__(self, model):
@@ -220,12 +220,14 @@ class RTDETRLoss(nn.Module):  #新的损失函数
 
     def compute_loss(self, pred_boxes, pred_logits, targets):
         """计算边界框和分类损失"""
-        # 简化的损失计算 - 实际应该使用匈牙利匹配
         loss_bbox = torch.tensor(0.0, device=self.device)
         loss_giou = torch.tensor(0.0, device=self.device)
         loss_cls = torch.tensor(0.0, device=self.device)
 
         from ultralytics.utils.metrics import bbox_iou
+
+        batch_size = pred_boxes.shape[0]
+        num_queries = pred_boxes.shape[1]
 
         for i, target in enumerate(targets):
             if len(target['boxes']) == 0:
@@ -239,8 +241,19 @@ class RTDETRLoss(nn.Module):  #新的损失函数
             gt_boxes = target['boxes']  # [num_gt, 4]
             gt_labels = target['labels']  # [num_gt]
 
-            # 计算IoU矩阵
-            iou_matrix = bbox_iou(pred_box, gt_boxes, xywh=True)  # [num_queries, num_gt]
+            num_gt = gt_boxes.shape[0]
+
+            # 修复：正确计算 IoU 矩阵
+            # 扩展维度以便广播计算
+            pred_box_expanded = pred_box.unsqueeze(1)  # [num_queries, 1, 4]
+            gt_boxes_expanded = gt_boxes.unsqueeze(0)  # [1, num_gt, 4]
+
+            # 计算 IoU 矩阵 [num_queries, num_gt]
+            iou_matrix = bbox_iou(
+                pred_box_expanded.view(-1, 4),
+                gt_boxes_expanded.view(-1, 4),
+                xywh=False
+            ).view(num_queries, num_gt)
 
             # 为每个真实框分配最佳预测
             max_ious, best_indices = iou_matrix.max(0)  # [num_gt]
@@ -263,7 +276,7 @@ class RTDETRLoss(nn.Module):  #新的损失函数
 
                 # 创建目标分数
                 target_scores = torch.zeros_like(matched_pred_logits)
-                target_scores[range(len(matched_gt_labels)), matched_gt_labels] = 1.0
+                target_scores[range(len(matched_gt_labels)), matched_gt_labels.long()] = 1.0
 
                 loss_cls += self.bce(matched_pred_logits, target_scores)
 

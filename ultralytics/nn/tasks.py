@@ -388,7 +388,7 @@ class DetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        # 检查是否是 RTDETR 模型  新加预测损失函数
+        # 检查是否是 RTDETR 模型
         is_rtdetr = any(isinstance(m, RTDETRDecoder) for m in self.modules())
 
         if is_rtdetr:
