@@ -11,6 +11,7 @@ from .Extramodule import *
 import thop
 import torch
 from ultralytics.nn.modules import (
+    TransformerBlock,
     AIFI,
     C1,
     C2,
@@ -1085,7 +1086,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [ch[f], *args[1:]]
         elif m in {SimAM}:
             c2 = ch[f]
-        elif m is AIFI:
+        elif m in {AIFI, TransformerBlock}:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):
             c1, cm, c2 = ch[f], args[0], args[1]
