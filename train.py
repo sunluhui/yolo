@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 
-# 加载配置
+# 加载配置x
 model = YOLO(model='yolov8-CoordAtt.yaml', task='detect')
 
 # 训练参数
