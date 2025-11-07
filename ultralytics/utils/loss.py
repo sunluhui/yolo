@@ -155,224 +155,126 @@ class KeypointLoss(nn.Module):
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
 
 
-class v8DetectionLoss:
-    """Criterion class for computing training losses for YOLOv8 object detection."""
+class RTDETRLoss(nn.Module):  #新的损失函数
+    """Criterion class for computing training losses for RTDETR object detection."""
 
-    def __init__(self, model, tal_topk: int = 10):  # model must be de-paralleled
-        """Initialize v8DetectionLoss with model parameters and task-aligned assignment settings."""
-        device = next(model.parameters()).device  # get model device
-        h = model.args  # hyperparameters
+    def __init__(self, model):
+        super().__init__()
+        device = next(model.parameters()).device
+        h = model.args
 
-        m = model.model[-1]  # Detect() module
-        self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.hyp = h
-        self.stride = m.stride  # model strides
-        self.nc = m.nc  # number of classes
-        self.no = m.nc + m.reg_max * 4
-        self.reg_max = m.reg_max
+        self.nc = model.model[-1].nc  # number of classes
         self.device = device
+        self.hyp = h
 
-        self.use_dfl = m.reg_max > 1
+        # 损失函数
+        self.bce = nn.BCEWithLogitsLoss(reduction="mean")
+        self.l1_loss = nn.L1Loss(reduction="mean")
 
-        self.assigner = TaskAlignedAssigner(topk=tal_topk, num_classes=self.nc, alpha=0.5, beta=6.0)
-        self.bbox_loss = BboxLoss(m.reg_max).to(device)
-        self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
-
-        # 更可靠的 RTDETR 检测方法
-        self.is_rtdetr = self._check_rtdetr(model)
-
-    def _check_rtdetr(self, model):
-        """检查模型是否使用 RTDETRDecoder"""
-        for module in model.modules():
-            if hasattr(module, '__class__') and 'RTDETRDecoder' in module.__class__.__name__:
-                return True
-        return False
-
-    def preprocess(self, targets: torch.Tensor, batch_size: int, scale_tensor: torch.Tensor) -> torch.Tensor:
-        """Preprocess targets by converting to tensor format and scaling coordinates."""
-        nl, ne = targets.shape
-        if nl == 0:
-            out = torch.zeros(batch_size, 0, ne - 1, device=self.device)
-        else:
-            i = targets[:, 0]  # image index
-            _, counts = i.unique(return_counts=True)
-            counts = counts.to(dtype=torch.int32)
-            out = torch.zeros(batch_size, counts.max(), ne - 1, device=self.device)
-            for j in range(batch_size):
-                matches = i == j
-                if n := matches.sum():
-                    out[j, :n] = targets[matches, 1:]
-            out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
-        return out
-
-    def bbox_decode(self, anchor_points: torch.Tensor, pred_dist: torch.Tensor) -> torch.Tensor:
-        """Decode predicted object bounding box coordinates from anchor points and distribution."""
-        if self.use_dfl:
-            b, a, c = pred_dist.shape  # batch, anchors, channels
-            pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
-        return dist2bbox(pred_dist, anchor_points, xywh=False)
-
-    def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
-
-        # 更可靠的 RTDETR 输出检测
-        if self.is_rtdetr and isinstance(preds, (tuple, list)) and len(preds) == 5:
-            # RTDETR 输出格式: (dec_bboxes, dec_scores, enc_bboxes, enc_scores, dn_meta)
-            try:
-                return self.compute_rtdetr_loss(preds, batch)
-            except Exception as e:
-                print(f"RTDETR loss computation failed: {e}")
-                print("Falling back to standard YOLO loss computation")
-
-        # 原有的 YOLO 损失计算
-        loss = torch.zeros(3, device=self.device)  # box, cls, dfl
-        feats = preds[1] if isinstance(preds, tuple) else preds
-
-        # 调试信息
-        print(f"Features shape: {[f.shape for f in feats]}")
-        print(f"self.no: {self.no}")
-
-        try:
-            pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-                (self.reg_max * 4, self.nc), 1
-            )
-        except RuntimeError as e:
-            print(f"Error in feature reshaping: {e}")
-            print("This might be due to RTDETR output format. Trying alternative approach...")
-            # 尝试替代方法
-            return self.alternative_loss_computation(preds, batch)
-
-        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
-        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
-
-        dtype = pred_scores.dtype
-        batch_size = pred_scores.shape[0]
-        imgsz = torch.tensor(feats[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]  # image size (h,w)
-        anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
-
-        # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
-        targets = self.preprocess(targets, batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
-        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
-        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
-
-        # Pboxes
-        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
-
-        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
-            pred_scores.detach().sigmoid(),
-            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
-            anchor_points * stride_tensor,
-            gt_labels,
-            gt_bboxes,
-            mask_gt,
-        )
-
-        target_scores_sum = max(target_scores.sum(), 1)
-
-        # Cls loss
-        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
-
-        # Bbox loss
-        if fg_mask.sum():
-            loss[0], loss[2] = self.bbox_loss(
-                pred_distri,
-                pred_bboxes,
-                anchor_points,
-                target_bboxes / stride_tensor,
-                target_scores,
-                target_scores_sum,
-                fg_mask,
-            )
-
-        loss[0] *= self.hyp.box  # box gain
-        loss[1] *= self.hyp.cls  # cls gain
-        loss[2] *= self.hyp.dfl  # dfl gain
-
-        return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
-
-    def compute_rtdetr_loss(self, preds, batch):
-        """Compute loss for RTDETR output format."""
+    def forward(self, preds, batch):
+        """Calculate loss for RTDETR output."""
         dec_bboxes, dec_scores, enc_bboxes, enc_scores, dn_meta = preds
 
-        print(f"RTDETR output shapes: dec_bboxes={dec_bboxes.shape}, dec_scores={dec_scores.shape}")
-
-        # 使用 decoder 的输出计算损失
+        # 使用 decoder 输出计算损失
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
 
         batch_size = dec_bboxes.shape[0]
         num_queries = dec_bboxes.shape[1]
 
-        # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
-        targets = self.preprocess(targets, batch_size, scale_tensor=torch.tensor([1, 1, 1, 1], device=self.device))
-        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
+        # 准备目标
+        targets = self.prepare_targets(batch, batch_size)
 
-        # 简化的匈牙利匹配损失计算
-        from ultralytics.utils.metrics import bbox_iou
+        # 计算匹配和损失
+        loss_bbox, loss_giou, loss_cls = self.compute_loss(dec_bboxes, dec_scores, targets)
 
-        # 计算预测框和真实框之间的成本矩阵
-        cost_bbox = torch.cdist(dec_bboxes.view(-1, 4), gt_bboxes.view(-1, 4), p=1)  # L1距离
-        cost_giou = -bbox_iou(dec_bboxes.view(-1, 4), gt_bboxes.view(-1, 4), CIoU=True).view(batch_size, num_queries,
-                                                                                             -1)
-        cost_class = -dec_scores.softmax(-1).view(batch_size * num_queries, -1).gather(1, gt_labels.view(-1, 1).repeat(
-            num_queries, 1))
-
-        # 简化的匹配：为每个真实框分配最佳预测
-        total_loss = 0
-        for i in range(batch_size):
-            num_gts = (gt_bboxes[i].sum(-1) > 0).sum()
-            if num_gts == 0:
-                continue
-
-            # 选择前k个预测与真实框匹配
-            k = min(num_gts, num_queries)
-            ious = bbox_iou(dec_bboxes[i], gt_bboxes[i, :num_gts])
-            _, topk_indices = ious.topk(k, dim=0)
-
-            # 计算匹配的损失
-            for j in range(k):
-                pred_idx = topk_indices[j, j]
-                gt_idx = j
-
-                # 边界框损失 (L1 + GIoU)
-                bbox_loss = F.l1_loss(dec_bboxes[i, pred_idx], gt_bboxes[i, gt_idx])
-                giou_loss = 1 - bbox_iou(dec_bboxes[i, pred_idx:pred_idx + 1], gt_bboxes[i, gt_idx:gt_idx + 1],
-                                         CIoU=True)
-
-                # 分类损失
-                class_loss = F.cross_entropy(dec_scores[i, pred_idx:pred_idx + 1],
-                                             gt_labels[i, gt_idx:gt_idx + 1].long().squeeze(-1))
-
-                total_loss += bbox_loss + giou_loss + class_loss
-
-        # 平均损失
-        if batch_size > 0:
-            total_loss = total_loss / batch_size
-
-        # 分配损失到各个分量
-        loss[0] = total_loss * 0.5  # 边界框损失
-        loss[1] = total_loss * 0.5  # 分类损失
+        # 分配损失
+        loss[0] = (loss_bbox + loss_giou) * 0.5  # 边界框损失
+        loss[1] = loss_cls  # 分类损失
         loss[2] = torch.tensor(0.0, device=self.device)  # DFL损失设为0
 
-        loss[0] *= self.hyp.box  # box gain
-        loss[1] *= self.hyp.cls  # cls gain
-        loss[2] *= self.hyp.dfl  # dfl gain
+        # 应用超参数
+        loss[0] *= self.hyp.box if hasattr(self.hyp, 'box') else 1.0
+        loss[1] *= self.hyp.cls if hasattr(self.hyp, 'cls') else 1.0
 
-        return loss * batch_size, loss.detach()
+        return loss.sum() * batch_size, loss.detach()
 
-    def alternative_loss_computation(self, preds, batch):
-        """备用的损失计算方法，用于处理不兼容的输出格式"""
-        print("Using alternative loss computation")
-        loss = torch.zeros(3, device=self.device)  # box, cls, dfl
+    def prepare_targets(self, batch, batch_size):
+        """准备目标数据"""
+        targets = []
+        for i in range(batch_size):
+            # 获取当前batch的标签
+            batch_mask = batch["batch_idx"] == i
+            if batch_mask.any():
+                labels = batch["cls"][batch_mask]
+                boxes = batch["bboxes"][batch_mask]
+                targets.append({
+                    'labels': labels.to(self.device),
+                    'boxes': boxes.to(self.device)
+                })
+            else:
+                targets.append({
+                    'labels': torch.zeros(0, device=self.device, dtype=torch.long),
+                    'boxes': torch.zeros(0, 4, device=self.device)
+                })
+        return targets
 
-        # 简化的损失计算，返回一个可训练的零损失
-        # 在实际应用中，你需要根据你的模型输出实现具体的损失计算
-        loss[0] = torch.tensor(0.0, device=self.device, requires_grad=True)
-        loss[1] = torch.tensor(0.0, device=self.device, requires_grad=True)
-        loss[2] = torch.tensor(0.0, device=self.device, requires_grad=True)
+    def compute_loss(self, pred_boxes, pred_logits, targets):
+        """计算边界框和分类损失"""
+        # 简化的损失计算 - 实际应该使用匈牙利匹配
+        loss_bbox = torch.tensor(0.0, device=self.device)
+        loss_giou = torch.tensor(0.0, device=self.device)
+        loss_cls = torch.tensor(0.0, device=self.device)
 
-        return loss * 1, loss.detach()
+        from ultralytics.utils.metrics import bbox_iou
+
+        for i, target in enumerate(targets):
+            if len(target['boxes']) == 0:
+                continue
+
+            # 预测
+            pred_box = pred_boxes[i]  # [num_queries, 4]
+            pred_logit = pred_logits[i]  # [num_queries, num_classes]
+
+            # 真实
+            gt_boxes = target['boxes']  # [num_gt, 4]
+            gt_labels = target['labels']  # [num_gt]
+
+            # 计算IoU矩阵
+            iou_matrix = bbox_iou(pred_box, gt_boxes, xywh=True)  # [num_queries, num_gt]
+
+            # 为每个真实框分配最佳预测
+            max_ious, best_indices = iou_matrix.max(0)  # [num_gt]
+
+            valid_assignments = max_ious > 0.5  # IoU阈值
+
+            if valid_assignments.any():
+                # 边界框损失 (L1)
+                matched_pred_boxes = pred_box[best_indices[valid_assignments]]
+                matched_gt_boxes = gt_boxes[valid_assignments]
+                loss_bbox += self.l1_loss(matched_pred_boxes, matched_gt_boxes)
+
+                # GIoU损失
+                giou = bbox_iou(matched_pred_boxes, matched_gt_boxes, GIoU=True)
+                loss_giou += (1.0 - giou).mean()
+
+                # 分类损失
+                matched_pred_logits = pred_logit[best_indices[valid_assignments]]
+                matched_gt_labels = gt_labels[valid_assignments]
+
+                # 创建目标分数
+                target_scores = torch.zeros_like(matched_pred_logits)
+                target_scores[range(len(matched_gt_labels)), matched_gt_labels] = 1.0
+
+                loss_cls += self.bce(matched_pred_logits, target_scores)
+
+        # 平均损失
+        num_valid = sum(len(t['boxes']) > 0 for t in targets)
+        if num_valid > 0:
+            loss_bbox /= num_valid
+            loss_giou /= num_valid
+            loss_cls /= num_valid
+
+        return loss_bbox, loss_giou, loss_cls
 
 
 class v8DetectionLoss:

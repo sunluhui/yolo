@@ -388,7 +388,14 @@ class DetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        return E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
+        # 检查是否是 RTDETR 模型  新加预测损失函数
+        is_rtdetr = any(isinstance(m, RTDETRDecoder) for m in self.modules())
+
+        if is_rtdetr:
+            from ultralytics.utils.loss import RTDETRLoss
+            return RTDETRLoss(self)
+        else:
+            E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
 
 
 class OBBModel(DetectionModel):
