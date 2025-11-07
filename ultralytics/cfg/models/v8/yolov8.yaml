@@ -1,68 +1,50 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
-# Improved YOLOv8 object detection model with Transformer enhancements
-# Model docs: https://docs.ultralytics.com/models/yolov8
+# Ultralytics YOLOv8-RTDETR hybrid object detection model with P3/8 - P5/32 outputs
+# Model docs: https://docs.ultralytics.com/models/rtdetr
 # Task docs: https://docs.ultralytics.com/tasks/detect
-
+task: detect
 # Parameters
 nc: 80 # number of classes
-scales: # model compound scaling constants
+scales: # model compound scaling constants, i.e. 'model=yolov8n.yaml' will call yolov8.yaml with scale 'n'
   # [depth, width, max_channels]
-  n: [0.33, 0.25, 1024]
-  s: [0.33, 0.50, 1024]
-  m: [0.67, 0.75, 768]
-  l: [1.00, 1.00, 512]
-  x: [1.00, 1.25, 512]
+  n: [0.33, 0.25, 1024] # YOLOv8n summary: 225 layers,  3157200 parameters,  3157184 gradients,   8.9 GFLOPs
+  s: [0.33, 0.50, 1024] # YOLOv8s summary: 225 layers, 11166560 parameters, 11166544 gradients,  28.8 GFLOPs
+  m: [0.67, 0.75, 768] # YOLOv8m summary: 295 layers, 25902640 parameters, 25902624 gradients,  79.3 GFLOPs
+  l: [1.00, 1.00, 512] # YOLOv8l summary: 365 layers, 43691520 parameters, 43691504 gradients, 165.7 GFLOPs
+  x: [1.00, 1.25, 512] # YOLOv8x summary: 365 layers, 68229648 parameters, 68229632 gradients, 258.5 GFLOPs
 
-# YOLOv8.0 backbone with Transformer enhancements
+# YOLOv8.0n backbone
 backbone:
   # [from, repeats, module, args]
   - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
   - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
-  - [-1, 3, C2f, [128, True]]
-  - [-1, 1, AIFI, [128, 512, 4, 0.0]] # 3 - Transformer enhancement at P2
-  - [-1, 1, Conv, [256, 3, 2]] # 4-P3/8
-  - [-1, 6, C2f, [256, True]]
-  - [-1, 1, AIFI, [256, 1024, 8, 0.0]] # 6 - Transformer enhancement at P3
-  - [-1, 1, Conv, [512, 3, 2]] # 7-P4/16
+  - [-1, 3, C2f, [128, True]]  #- [-1, 1, BiFormerBlock, [128, 4, 7, 2]]
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 6, C2f, [256, True]]  #- [-1, 1, BiFormerBlock, [256, 8, 7, 4]]
+  - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16
   - [-1, 6, C2f, [512, True]]
-  - [-1, 1, AIFI, [512, 2048, 8, 0.1]] # 9 - Transformer enhancement at P4
-  - [-1, 1, Conv, [1024, 3, 2]] # 10-P5/32
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
   - [-1, 3, C2f, [1024, True]]
-  - [-1, 1, AIFI, [1024, 2048, 8, 0.1]] # 12 - Strong transformer at P5
+  - [-1, 1, AIFI, [1024, 8]] # 9
 
-# YOLOv8.0-p2 head with Deformable Transformer Decoder
+# YOLOv8.0n head
 head:
-  # Upsample path
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 9], 1, Concat, [1]] # cat backbone P4
-  - [-1, 3, C2f, [512]] # 15
+  - [[-1, 6], 1, Concat, [1]] # cat backbone P4
+  - [-1, 3, C2f, [512]] # 12
 
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 6], 1, Concat, [1]] # cat backbone P3
-  - [-1, 3, C2f, [256]] # 18 (P3/8-small)
-
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
-  - [[-1, 3], 1, Concat, [1]] # cat backbone P2
-  - [-1, 3, C2f, [128]] # 21 (P2/4-xsmall)
-  - [-1, 1, TransformerBlock, [128, 128, 4, 2]] # 22 - Transformer enhancement
-
-  # Downsample path with Deformable Attention
-  - [-1, 1, Conv, [128, 3, 2]]
-  - [[-1, 18], 1, Concat, [1]] # cat head P3
-  - [-1, 3, C2f, [256]] # 25 (P3/8-small)
+  - [[-1, 4], 1, Concat, [1]] # cat backbone P3
+  - [-1, 3, C2f, [256]] # 15 (P3/8-small)
 
   - [-1, 1, Conv, [256, 3, 2]]
-  - [[-1, 15], 1, Concat, [1]] # cat head P4
-  - [-1, 3, C2f, [512]] # 28 (P4/16-medium)
+  - [[-1, 12], 1, Concat, [1]] # cat head P4
+  - [-1, 3, C2f, [512]] # 18 (P4/16-medium)
 
   - [-1, 1, Conv, [512, 3, 2]]
-  - [[-1, 12], 1, Concat, [1]] # cat head P5
-  - [-1, 3, C2f, [1024]] # 31 (P5/32-large)
+  - [[-1, 9], 1, Concat, [1]] # cat head P5
+  - [-1, 3, C2f, [1024]] # 21 (P5/32-large)
 
-  # Deformable Transformer Decoder Head
-  - [[25, 28, 31], 1, DeformableTransformerDecoder, [256, 6, 1024, 0.1, 4, 4]] # 32
-
-  # Output layers for bbox and class predictions
-  - [-1, 1, nn.Conv2d, [256, 4, 1]] # 33 - bbox output
-  - [-1, 1, nn.Conv2d, [256, nc, 1]] # 34 - class output
+  #- [[15, 18, 21], 1, Detect, [nc]] # Detect(P3, P4, P5)
+  - [[15, 18, 21], 1, RTDETRDecoder, [nc, (256, 512, 1024), 256, 300, 4, 8, 6]]
