@@ -139,6 +139,7 @@ __all__ = (
     "RepC3",
     "RTDETRDecoder",
     "AIFI",
+    "TransformerBlock",
     "DeformableTransformerDecoder",
     "DeformableTransformerDecoderLayer",
     "MSDeformAttn",
