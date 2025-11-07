@@ -7,6 +7,7 @@ import types
 from copy import deepcopy
 from pathlib import Path
 from .AddAttention import *
+from .Extramodule import *
 import thop
 import torch
 from ultralytics.nn.modules import (
@@ -1017,6 +1018,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             DroneSPPF,
             FusionSPPF,
             ImprovedSPPF,
+            C2f_SCConv,
 
         }
     )
