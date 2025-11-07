@@ -31,13 +31,13 @@ class MultiBranchAttention(nn.Module):
         )
 
         # 门控机制
-        #self.gate = nn.Sequential(
-            #nn.AdaptiveAvgPool2d(1),
-            #nn.Conv2d(in_channels, in_channels // reduction_ratio, 1),
-            #nn.ReLU(),
-            #nn.Conv2d(in_channels // reduction_ratio, len(self.branches), 1),
-            #nn.Softmax(dim=1)
-        #)
+        self.gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_channels, in_channels // reduction_ratio, 1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels // reduction_ratio, len(self.branches), 1),
+            nn.Softmax(dim=1)
+        )
 
     def forward(self, x):
         branch_outputs = [branch(x) for branch in self.branches]
@@ -45,14 +45,14 @@ class MultiBranchAttention(nn.Module):
         fused = torch.cat(branch_outputs, dim=1)  # 做消融：去掉上面的门控机制代码和下面的门控加权代码，保留本行和return代码。
 
         # 门控加权
-        #gate_weights = self.gate(x)  # [B, num_branches, 1, 1]
-        #weighted_outputs = []
-        #for i, out in enumerate(branch_outputs):
-            #weight = gate_weights[:, i:i + 1]  # [B, 1, 1, 1]
-            #weighted_outputs.append(out * weight)
+        gate_weights = self.gate(x)  # [B, num_branches, 1, 1]
+        weighted_outputs = []
+        for i, out in enumerate(branch_outputs):
+            weight = gate_weights[:, i:i + 1]  # [B, 1, 1, 1]
+            weighted_outputs.append(out * weight)
 
         # 特征融合
-        #fused = torch.cat(weighted_outputs, dim=1)
+        fused = torch.cat(weighted_outputs, dim=1)
         return self.fusion(fused) + x  # 残差连接
 
 
