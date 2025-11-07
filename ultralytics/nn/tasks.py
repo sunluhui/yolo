@@ -301,6 +301,40 @@ class BaseModel(torch.nn.Module):
 
 
 class DetectionModel(BaseModel):
+    """YOLOv8 detection model.xinjia新加"""
+
+    def __init__(self, cfg='yolov8n.yaml', ch=3, nc=None, verbose=True):  # model, input channels, number of classes
+        """Initialize the YOLOv8 detection model with given config and parameters."""
+        super().__init__()
+        self.yaml = cfg if isinstance(cfg, dict) else yaml_load(check_yaml(cfg), append_filename=True)  # cfg dict
+        self.yaml['nc'] = nc or (self.yaml.get('nc', None))  # override yaml value
+
+        # Define model
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
+
+        # Build strides
+        m = self.model[-1]  # Detect()
+        if isinstance(m, (Detect, Segment, Pose, OBB, RTDETRDecoder)):
+            s = 256  # 2x min stride
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])
+            self.stride = m.stride
+            m.bias_init()  # only run once
+
+        # Check if it's RTDETR and initialize appropriate criterion
+        self._is_rtdetr = any(isinstance(module, RTDETRDecoder) for module in self.modules())
+        if self._is_rtdetr:
+            from ultralytics.utils.loss import RTDETRLoss
+            self.criterion = RTDETRLoss(self)
+        else:
+            # Initialize detection criterion
+            self.criterion = self.init_criterion()
+
+        # Initialize weights and biases
+        initialize_weights(self)
+        if verbose:
+            self.info()
+            print("")
+class DetectionModel(BaseModel):
     """YOLO detection model."""
 
     def __init__(self, cfg="yolo11n.yaml", ch=3, nc=None, verbose=True):  # model, input channels, number of classes
