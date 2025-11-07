@@ -42,7 +42,7 @@ class MultiBranchAttention(nn.Module):
     def forward(self, x):
         branch_outputs = [branch(x) for branch in self.branches]
 
-        fused = torch.cat(branch_outputs, dim=1)  # 做消融：去掉上面的门控机制代码和下面的门控加权代码，保留本行和return代码。
+        # fused = torch.cat(branch_outputs, dim=1)  # 做消融：去掉上面的门控机制代码和下面的门控加权代码，保留本行和return代码。
 
         # 门控加权
         gate_weights = self.gate(x)  # [B, num_branches, 1, 1]
