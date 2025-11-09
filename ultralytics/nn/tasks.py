@@ -1084,7 +1084,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [c1, *args[1:]]
         elif m in {BiFormerBlock}:
             args = [ch[f], *args[1:]]
-        elif m in {SimAM}:
+        elif m in {SimAM, MLKA}:
             c2 = ch[f]
         elif m in {AIFI, TransformerBlock}:
             args = [ch[f], *args]
