@@ -16,7 +16,7 @@ Example:
     os.system(f"onnxslim {f} {f} && open {f}")  # pip install onnxslim
     ```
 """
-
+from .DWConv_and_DWConvC2f import DW_C2f
 from .block import (
     C1,
     C2,
@@ -196,7 +196,10 @@ __all__ = (
     "DroneSPPF",
     "FusionSPPF",
     "ImprovedSPPF",
+    "CSPPC",
+    "DW_C2f",
 )
+from .CSPPC import CSPPC
 from .ela import ELA
 from .ms_cam import MS_CAM
 from .simam import SimAM

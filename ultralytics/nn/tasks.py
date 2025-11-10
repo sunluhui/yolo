@@ -11,6 +11,8 @@ from .Extramodule import *
 import thop
 import torch
 from ultralytics.nn.modules import (
+    DW_C2f,
+    CSPPC,
     TransformerBlock,
     AIFI,
     C1,
@@ -1020,6 +1022,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             FusionSPPF,
             ImprovedSPPF,
             C2f_SCConv,
+            CSPPC,
+            DW_C2f,
 
         }
     )
