@@ -1024,6 +1024,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2f_SCConv,
             CSPPC,
             DW_C2f,
+            VSSBlock_YOLO,
 
         }
     )
@@ -1090,7 +1091,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [ch[f], *args[1:]]
         elif m in {SimAM, MLKA}:
             c2 = ch[f]
-        elif m in {AIFI, TransformerBlock}:
+        elif m in {AIFI, TransformerBlock, VSSBlock_YOLO}:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):
             c1, cm, c2 = ch[f], args[0], args[1]
