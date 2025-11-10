@@ -1,5 +1,4 @@
 import math
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,7 +6,6 @@ import torch.nn as nn
 __all__ = (
     "DW_C2f",
     "DWConv",
-
 )
 
 
@@ -72,7 +70,8 @@ class Bottleneck(nn.Module):
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = DWConv(c1, c_, k[0], 1)
-        self.cv2 = DWConv(c_, c2, k[1], 1)
+        # 移除 g=g 参数
+        self.cv2 = DWConv(c_, c2, k[1], 1)  # 修改这一行
         self.add = shortcut and c1 == c2
 
     def forward(self, x):
