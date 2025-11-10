@@ -40,12 +40,15 @@ class Conv(nn.Module):
         return self.act(self.conv(x))
 
 
-class DWConv(nn.Module):
+class DWConv(Conv):
     """真正的深度可分离卷积实现"""
 
-    def __init__(self, c1, c2, k=1, s=1, d=1, act=True):
-        super().__init__()
-        # 深度卷积
+    def __init__(self, c1, c2, k=1, s=1, d=1, act=True, **kwargs):
+        # 添加 **kwargs 来接受多余的参数
+        super().__init__(c1, c2, k, s, g=c1, d=d, act=act)  # 关键修改：groups=c1
+        # 删除继承的普通卷积
+        del self.conv
+        # 重新定义深度可分离卷积
         self.dw_conv = nn.Conv2d(
             c1, c1, k, s,
             padding=autopad(k, None, d),
@@ -53,15 +56,10 @@ class DWConv(nn.Module):
             dilation=d,
             bias=False
         )
-        # 点卷积
-        self.pw_conv = nn.Conv2d(c1, c2, 1, 1, 0, bias=False)
-        self.bn = nn.BatchNorm2d(c2)
-        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
+        self.pw_conv = nn.Conv2d(c1, c2, 1, 1, 0, bias=False)  # 点卷积
 
     def forward(self, x):
-        x = self.dw_conv(x)
-        x = self.pw_conv(x)
-        return self.act(self.bn(x))
+        return self.act(self.bn(self.pw_conv(self.dw_conv(x))))
 
     def forward_fuse(self, x):
         return self.act(self.pw_conv(self.dw_conv(x)))
