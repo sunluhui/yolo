@@ -1,18 +1,12 @@
-# Ultralytics YOLO11 object detection model with Transformer modules
-# Lightweight integration of transformer modules
-
+# Ultralytics YOLO11 with lightweight transformers
 # Parameters
 nc: 80
 scales:
   n: [0.50, 0.25, 1024]
   s: [0.50, 0.50, 1024]
-  m: [0.50, 1.00, 512]
-  l: [1.00, 1.00, 512]
-  x: [1.00, 1.50, 512]
 
-# YOLO11 backbone with lightweight transformer
+# Backbone
 backbone:
-  # [from, repeats, module, args]
   - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
   - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
   - [-1, 2, C3k2, [256, False, 0.25]]
@@ -23,10 +17,10 @@ backbone:
   - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
   - [-1, 2, C3k2, [1024, True]]
   - [-1, 1, SPPF, [1024, 5]] # 9
-  # Lightweight Transformer Block at the end of backbone
-  - [-1, 1, TransformerBlock, [1024, 1024, 4, 1]] # 10 (lightweight transformer)
+  # Lightweight Transformer at backbone end
+  - [-1, 1, TransformerBlock, [1024, 1024, 4, 1]] # 10
 
-# YOLO11 head with transformer-enhanced features
+# Head
 head:
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
   - [[-1, 6], 1, Concat, [1]] # cat backbone P4
@@ -35,8 +29,8 @@ head:
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
   - [[-1, 4], 1, Concat, [1]] # cat backbone P3
   - [-1, 2, C3k2, [256, False]] # 16 (P3/8-small)
-  # Lightweight AIFI at P3 for global context
-  - [-1, 1, AIFI, [256, 512, 4, 0.1]] # 17
+  # Lightweight attention at P3
+  - [-1, 1, AIFI, [256, 256, 2, 0.0]] # 17
 
   - [-1, 1, Conv, [256, 3, 2]]
   - [[-1, 13], 1, Concat, [1]] # cat head P4
@@ -46,4 +40,4 @@ head:
   - [[-1, 10], 1, Concat, [1]] # cat head P5
   - [-1, 2, C3k2, [1024, True]] # 23 (P5/32-large)
 
-  - [[17, 20, 23], 1, Detect, [nc]] # Detect(P3, P4, P5)
+  - [[16, 20, 23], 1, Detect, [nc]]
