@@ -583,3 +583,17 @@ def SwinTransformer_Tiny(weights=''):
     if weights:
         model.load_state_dict(update_weight(model.state_dict(), torch.load(weights)['model']))
     return model
+
+
+class SwinTransformer_Tiny(nn.Module):
+    def __init__(self, weights='', channels=3):
+        super().__init__()
+        self.model = SwinTransformer(depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24])
+        if weights:
+            self.model.load_state_dict(update_weight(self.model.state_dict(), torch.load(weights)['model']))
+
+    def forward(self, x):
+        # SwinTransformer 返回多个特征图，我们需要选择其中3个用于检测
+        features = self.model(x)
+        # 通常选择后3个特征图对应 P3, P4, P5
+        return features[1:]  # 返回 [P3, P4, P5] 对应下采样8x, 16x, 32x
