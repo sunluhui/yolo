@@ -96,6 +96,7 @@ from ultralytics.utils.torch_utils import (
     scale_img,
     time_sync,
 )
+from .Extramodule.CARAFE import CARAFE
 from .modules.dynamic_snake_conv import DynamicSnakeConv
 
 
@@ -1123,6 +1124,9 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[0]
             c1 = ch[f]
             args = [c1, c2, *args[1:]]
+        elif m is CARAFE:
+            c2 = ch[f]
+            args = [c2, *args]
         elif m is CBFuse:
             c2 = ch[f[-1]]
         elif m is DWR:
