@@ -53,10 +53,10 @@ class CrossMerge(torch.autograd.Function):
         return xs, None, None
 
 
-# Selective Scan Core Function
+# Selective Scan Core Function - 修复自定义函数装饰器
 class SelectiveScanCore(torch.autograd.Function):
     @staticmethod
-    @torch.cuda.amp.custom_fwd(device_type='cuda')
+    @torch.cuda.amp.custom_fwd
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1,
                 oflex=True):
         if u.stride(-1) != 1:
@@ -78,16 +78,15 @@ class SelectiveScanCore(torch.autograd.Function):
         ctx.delta_softplus = delta_softplus
         ctx.backnrows = backnrows
 
-        # 这里需要实际的 selective_scan 实现
-        # 由于我们不知道具体的实现，这里使用一个简化的版本
-        out = u  # 简化实现，实际应该使用 selective_scan
+        # 简化实现 - 实际应该使用 selective_scan
+        out = u  # 简化实现
         x = u  # 简化实现
 
         ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
         return out
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd(device_type='cuda')
+    @torch.cuda.amp.custom_bwd
     def backward(ctx, dout, *args):
         u, delta, A, B, C, D, delta_bias, x = ctx.saved_tensors
         if dout.stride(-1) != 1:
@@ -396,7 +395,7 @@ class XSSBlock(nn.Module):
             ))
         self.ss2d = nn.Sequential(*ssm_layers)
 
-        self.drop_path = DropPath(drop_path)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.lsblock = LSBlock(hidden_dim, hidden_dim)
         self.mlp_branch = mlp_ratio > 0
         if self.mlp_branch:
@@ -472,7 +471,7 @@ class VSSBlock_YOLO(nn.Module):
                 forward_type=forward_type,
             )
 
-        self.drop_path = DropPath(drop_path)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.lsblock = LSBlock(hidden_dim, hidden_dim)
         if self.mlp_branch:
             self.norm2 = norm_layer(hidden_dim)
