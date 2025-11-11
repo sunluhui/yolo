@@ -3,3 +3,4 @@ from .MLKA import *
 from .mamba_yolo import *
 from .AKConv import *
 from .MLLA import *
+from .swinTransFormer import *

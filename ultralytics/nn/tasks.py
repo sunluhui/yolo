@@ -97,6 +97,7 @@ from ultralytics.utils.torch_utils import (
     time_sync,
 )
 from .Extramodule.CARAFE import CARAFE
+from .Extramodule.revcol import RevCol
 from .modules.dynamic_snake_conv import DynamicSnakeConv
 
 
@@ -1139,6 +1140,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = sum(ch[x] for x in f)
         elif m in {EMA_attention}:
             args = [ch[f], *args]
+        elif m is SwinTransformer_Tiny:
+            if m is RevCol:
+                args[1] = [make_divisible(min(k, max_channels) * width, 8) for k in args[1]]
+                args[2] = [max(round(k * depth), 1) for k in args[2]]
+            m = m(*args)
+            c2 = m.channel
         else:
             c2 = ch[f]
         m_ = torch.nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
