@@ -17,3 +17,4 @@ backbone:
   # [from, repeats, module, args]
   - [-1, 1, SwinTransformer_Tiny, []]  # 0 - SwinTransformer backbone
   # SwinTransformer输出多尺度特征，我们直接使用其输出
+  - [[], 1, Detect, [nc]] # Detect(P3, P4, P5)
