@@ -69,7 +69,7 @@ from ultralytics.nn.modules import (
     MultiBranchAttention, ChannelAttention, SpatialAttention, LocalContextAttention, GlobalContextAttention, MS_CAM, ELA
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
-from ultralytics.nn.modules.bifpn import BiFPN_Concat2
+from ultralytics.nn.modules.bifpn import Fusion
 from ultralytics.nn.modules.block import CoordAtt, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, \
     AdvancedCA_RFA_EnhancedSPPF, AdaptiveSPPF, FocalModulation, SPPFA, SPPF_DC, SPPF_Att, SPPF_GAP, SPPF_MultiScale, \
     DroneSPPF, FusionSPPF, ImprovedSPPF
@@ -1131,7 +1131,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
-        elif m in {Concat, BiFPN_Concat2}:
+        elif m in {Concat}:
             c2 = sum(ch[x] for x in f)
         elif m in {EMA_attention}:
             args = [ch[f], *args]
