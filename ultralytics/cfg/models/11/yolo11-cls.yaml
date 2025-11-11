@@ -1,51 +1,32 @@
-# Ultralytics YOLO11 object detection model with SwinTransformer-Tiny backbone
-# Model docs: https://docs.ultralytics.com/models/yolo11
-# Task docs: https://docs.ultralytics.com/tasks/detect
-
+# Ultralytics YOLO11 with SwinTransformer-Tiny (简化版)
 # Parameters
-nc: 80  # number of classes
-scales: # model compound scaling constants
-  # [depth, width, max_channels]
-  n: [0.50, 0.25, 1024]
-  s: [0.50, 0.50, 1024]
-  m: [0.50, 1.00, 512]
-  l: [1.00, 1.00, 512]
-  x: [1.00, 1.50, 512]
+nc: 80
 
-# YOLO11 backbone with SwinTransformer-Tiny
 backbone:
   # [from, repeats, module, args]
-  - [-1, 1, SwinTransformer_Tiny, []]  # 0 - 整个SwinTransformer backbone
+  - [-1, 1, SwinTransformer_Tiny, []]  # 0
 
-  # 从SwinTransformer提取特征并调整通道数
-  # SwinTransformer输出多个特征图，我们选择其中3个用于检测
-  - [0, 1, Conv, [192, 1, 1]]  # 1-P3/8  (调整stage2输出，下采样8倍)
-  - [0, 1, Conv, [384, 1, 1]]  # 2-P4/16 (调整stage3输出，下采样16倍)
-  - [0, 1, Conv, [768, 1, 1]]  # 3-P5/32 (调整stage4输出，下采样32倍)
+  # 自动获取SwinTransformer的特征图并调整
+  - [0, 1, Conv, [256, 1, 1]]  # 1-P3
+  - [0, 1, Conv, [512, 1, 1]]  # 2-P4
+  - [0, 1, Conv, [1024, 1, 1]] # 3-P5
+  - [-1, 1, SPPF, [1024, 5]]   # 4
 
-  # 在P5上添加SPPF增强感受野
-  - [-1, 1, SPPF, [768, 5]]  # 4
-
-# YOLO11 head
 head:
-  # 上采样路径 P5 -> P4
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 5 P5->P4
-  - [[-1, 2], 1, Concat, [1]]  # 6 融合P5上采样和P4
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 5
+  - [[-1, 2], 1, Concat, [1]]  # 6
   - [-1, 3, C3k2, [512]]  # 7
 
-  # 上采样路径 P4 -> P3
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 8
-  - [[-1, 1], 1, Concat, [1]]  # 9 融合P4上采样和P3
+  - [[-1, 1], 1, Concat, [1]]  # 9
   - [-1, 3, C3k2, [256]]  # 10 (P3/8-small)
 
-  # 下采样路径 P3 -> P4
   - [-1, 1, Conv, [256, 3, 2]] # 11
-  - [[-1, 7], 1, Concat, [1]]  # 12 融合P3下采样和P4
+  - [[-1, 7], 1, Concat, [1]]  # 12
   - [-1, 3, C3k2, [512]]  # 13 (P4/16-medium)
 
-  # 下采样路径 P4 -> P5
   - [-1, 1, Conv, [512, 3, 2]] # 14
-  - [[-1, 4], 1, Concat, [1]]  # 15 融合P4下采样和P5
-  - [-1, 3, C3k2, [768]]  # 16 (P5/32-large)
+  - [[-1, 4], 1, Concat, [1]]  # 15
+  - [-1, 3, C3k2, [1024]] # 16 (P5/32-large)
 
   - [[10, 13, 16], 1, Detect, [nc]]  # Detect(P3, P4, P5)
