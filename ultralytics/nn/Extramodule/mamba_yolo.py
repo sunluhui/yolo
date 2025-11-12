@@ -4,24 +4,24 @@ import torch.nn.functional as F
 
 
 class VSSBlock_YOLO(nn.Module):
-    """简化的 Mamba 块，使用纯 PyTorch 实现"""
+    """修正参数数量"""
 
-    def __init__(self, dim, d_state=16, d_conv=4, expand=2):
+    def __init__(self, c1, c2):  # 只接受两个参数
         super().__init__()
+        dim = c2  # 使用第二个参数作为维度
         self.dim = dim
         self.mlp = nn.Sequential(
-            nn.Linear(dim, dim * expand),
+            nn.Linear(dim, dim * 2),
             nn.GELU(),
-            nn.Linear(dim * expand, dim)
+            nn.Linear(dim * 2, dim)
         )
 
-        # 使用卷积替代 Mamba 的选择性扫描
         self.conv1d = nn.Conv1d(
             in_channels=dim,
             out_channels=dim,
-            kernel_size=d_conv,
-            padding=d_conv // 2,
-            groups=dim  # 深度可分离卷积
+            kernel_size=3,
+            padding=1,
+            groups=dim
         )
 
         self.norm = nn.LayerNorm(dim)
@@ -30,25 +30,17 @@ class VSSBlock_YOLO(nn.Module):
     def forward(self, x):
         residual = x
 
-        # 处理 4D 输入 [B, C, H, W]
         if len(x.shape) == 4:
             B, C, H, W = x.shape
-            x = x.view(B, C, -1).transpose(1, 2)  # [B, L, C]
+            x = x.view(B, C, -1).transpose(1, 2)
 
         x = self.norm(x)
-
-        # 应用 1D 卷积
-        x_conv = x.transpose(1, 2)  # [B, C, L]
+        x_conv = x.transpose(1, 2)
         x_conv = self.conv1d(x_conv)
-        x_conv = x_conv.transpose(1, 2)  # [B, L, C]
-
-        # MLP
+        x_conv = x_conv.transpose(1, 2)
         x_mlp = self.mlp(x)
-
-        # 合并
         x = x_conv + x_mlp
 
-        # 恢复形状
         if len(residual.shape) == 4:
             x = x.transpose(1, 2).view(B, C, H, W)
 
@@ -56,10 +48,11 @@ class VSSBlock_YOLO(nn.Module):
 
 
 class XSSBlock(nn.Module):
-    """简化的 XSS 块"""
+    """修正参数数量"""
 
-    def __init__(self, dim):
+    def __init__(self, c1, c2):  # 只接受两个参数
         super().__init__()
+        dim = c2
         self.block = nn.Sequential(
             nn.Conv2d(dim, dim, 3, padding=1),
             nn.BatchNorm2d(dim),
@@ -67,17 +60,18 @@ class XSSBlock(nn.Module):
             nn.Conv2d(dim, dim, 3, padding=1),
             nn.BatchNorm2d(dim)
         )
-        self.act = nn.SiLU()
 
     def forward(self, x):
-        return self.act(x + self.block(x))
+        return x + self.block(x)
 
 
 class SimpleStem(nn.Module):
-    def __init__(self, in_ch=3, out_ch=128, kernel_size=3):
+    """修正参数数量"""
+
+    def __init__(self, c1, c2):  # 只接受两个参数
         super().__init__()
-        self.conv = nn.Conv2d(in_ch, out_ch, kernel_size, stride=2, padding=kernel_size // 2)
-        self.bn = nn.BatchNorm2d(out_ch)
+        self.conv = nn.Conv2d(c1, c2, 3, stride=2, padding=1)
+        self.bn = nn.BatchNorm2d(c2)
         self.act = nn.SiLU()
 
     def forward(self, x):
@@ -85,14 +79,13 @@ class SimpleStem(nn.Module):
 
 
 class VisionClueMerge(nn.Module):
-    def __init__(self, out_ch):
+    """修正参数数量"""
+
+    def __init__(self, c1, c2):  # 只接受两个参数
         super().__init__()
-        self.conv = nn.Conv2d(out_ch, out_ch, 3, stride=2, padding=1)
-        self.bn = nn.BatchNorm2d(out_ch)
+        self.conv = nn.Conv2d(c1, c2, 3, stride=2, padding=1)
+        self.bn = nn.BatchNorm2d(c2)
         self.act = nn.SiLU()
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
-
-# 移除所有 SelectiveScan 相关的复杂代码
-# 只保留简单的模块实现
