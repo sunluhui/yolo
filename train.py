@@ -7,6 +7,7 @@ from ultralytics import YOLO
 # 加载配置xaa
 model = YOLO(model='rtdetr-r18.yaml', task='detect')
 torch.use_deterministic_algorithms(False)
+model.overrides['nc'] = 10  # 修改为你的数据集类别数
 # 训练参数
 model.train(
     data='VisDrone.yaml',  # 数据集配置文件
