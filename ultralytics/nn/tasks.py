@@ -1029,6 +1029,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             VSSBlock_YOLO,
             AKConv,
             LightMLLABlock,
+            SimpleStem, VisionClueMerge, VSSBlock_YOLO, XSSBlock
 
         }
     )
