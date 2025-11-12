@@ -8,6 +8,8 @@ scales: # model compound scaling constants, i.e. 'model=yolov8n-cls.yaml' will c
   l: [1.00, 1.00, 1024]
 # Ai缝合怪 RT-DETR创新改进
 backbone:
+  type: 'CSPDarknet'
+  layers:
   # [from, repeats, module, args]
   - [-1, 1, ConvNormLayer, [32, 3, 2, None, False, 'relu']] # 0-P1/2
   - [-1, 1, ConvNormLayer, [32, 3, 1, None, False, 'relu']] # 1
