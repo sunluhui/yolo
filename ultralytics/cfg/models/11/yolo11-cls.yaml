@@ -1,29 +1,24 @@
-# Ultralytics YOLO11 with SwinTransformer backbone
-# Parameters
-nc: 80  # number of classes
+# Ultralytics YOLO11 with SwinTransformer - Simplified
+nc: 80
 
-# YOLO11 with SwinTransformer backbone
 backbone:
-  # [from, repeats, module, args]
   - [-1, 1, SwinTransformer_Tiny, []]  # 0
 
-# YOLO11 head - 需要根据SwinTransformer的输出调整
 head:
-  # 上采样并连接SwinTransformer的特征图
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 1
-  - [[-1, 2], 1, Concat, [1]]  # cat backbone P4 -> 2
-  - [-1, 3, C2f, [512]]  # 3
+  # 简单连接SwinTransformer的输出
+  - [0, 1, Conv, [256, 1, 1]]  # 1
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 2
+  - [0, 1, Conv, [128, 1, 1]]  # 3
+  - [[-1, 2], 1, Concat, [1]]  # 4
+  - [-1, 3, C2f, [256]]  # 5 (P3/8)
 
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 4
-  - [[-1, 1], 1, Concat, [1]]  # cat backbone P3 -> 5
-  - [-1, 3, C2f, [256]]  # 6 (P3/8-small)
+  - [-1, 1, Conv, [256, 3, 2]]  # 6
+  - [[-1, 1], 1, Concat, [1]]  # 7
+  - [-1, 3, C2f, [512]]  # 8 (P4/16)
 
-  - [-1, 1, Conv, [256, 3, 2]]  # 7
-  - [[-1, 3], 1, Concat, [1]]  # cat head P4 -> 8
-  - [-1, 3, C2f, [512]]  # 9 (P4/16-medium)
+  - [-1, 1, Conv, [512, 3, 2]]  # 9
+  - [0, 1, Conv, [512, 1, 1]]  # 10
+  - [[-1, 9], 1, Concat, [1]]  # 11
+  - [-1, 3, C2f, [768]]  # 12 (P5/32)
 
-  - [-1, 1, Conv, [512, 3, 2]]  # 10
-  - [[-1, 0], 1, Concat, [1]]  # cat head P5 -> 11
-  - [-1, 3, C2f, [1024]]  # 12 (P5/32-large)
-
-  - [[6, 9, 12], 1, Detect, [nc]]  # Detect(P3, P4, P5)
+  - [[5, 8, 12], 1, Detect, [nc]]  # Detect(P3, P4, P5)
