@@ -961,6 +961,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     base_modules = frozenset(
         {
+            HWD,
             Classify,
             Conv,
             ConvTranspose,
@@ -1028,7 +1029,6 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             DW_C2f,
             VSSBlock_YOLO,
             AKConv,
-            LightMLLABlock,
             SimpleStem, VisionClueMerge, VSSBlock_YOLO, XSSBlock
 
         }

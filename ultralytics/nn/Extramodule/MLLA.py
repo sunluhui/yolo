@@ -1,3 +1,4 @@
+
 # --------------------------------------------------------
 # Swin Transformer
 # Copyright (c) 2021 Microsoft
@@ -444,42 +445,3 @@ class MLLA(nn.Module):
         x = self.forward_features(x)
         x = self.head(x)
         return x
-
-
-class LightMLLABlock(nn.Module):
-    """轻量级MLLA模块，可直接插入YOLO"""
-
-    def __init__(self, dim, input_size, num_heads=8, mlp_ratio=4.0):
-        super().__init__()
-        self.dim = dim
-        self.input_size = input_size
-        self.num_heads = num_heads
-
-        # 简化版MLLA Block
-        self.norm1 = nn.LayerNorm(dim)
-        self.attn = LinearAttention(
-            dim=dim,
-            input_resolution=input_size,
-            num_heads=num_heads
-        )
-        self.norm2 = nn.LayerNorm(dim)
-        self.mlp = Mlp(
-            in_features=dim,
-            hidden_features=int(dim * mlp_ratio)
-        )
-
-    def forward(self, x):
-        """输入输出都是 [B, C, H, W]"""
-        B, C, H, W = x.shape
-
-        # 转换为序列 [B, H*W, C]
-        x_seq = x.flatten(2).transpose(1, 2)
-
-        # MLLA处理
-        x_seq = x_seq + self.attn(self.norm1(x_seq))
-        x_seq = x_seq + self.mlp(self.norm2(x_seq))
-
-        # 转换回特征图 [B, C, H, W]
-        x_out = x_seq.transpose(1, 2).reshape(B, C, H, W)
-
-        return x_out
