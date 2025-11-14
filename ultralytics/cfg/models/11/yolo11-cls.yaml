@@ -57,4 +57,4 @@ head:
   - [-1, 2, C3k2, [512, False]] # 25 (P4/16-medium)
 
   # 检测头 - 使用P2, P3, P4 (移除了P5大目标检测头)
-  - [[19, 22, 25], 1, RTDETRDecoder, [nc]] # Detect(P2, P3, P4)
+  - [[19, 22, 25], 1, Detect, [nc]] # Detect(P2, P3, P4)
