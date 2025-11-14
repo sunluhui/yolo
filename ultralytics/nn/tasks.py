@@ -11,6 +11,10 @@ from .Extramodule import *
 import thop
 import torch
 from ultralytics.nn.modules import (
+    ConvNormLayer,
+    BasicBlock,
+    BottleNeck,
+    Blocks,
     DW_C2f,
     CSPPC,
     TransformerBlock,
@@ -224,6 +228,10 @@ class BaseModel(torch.nn.Module):
                     m.forward = m.forward_fuse  # update forward
                 if isinstance(m, RepVGGDW):
                     m.fuse()
+                    m.forward = m.forward_fuse
+                if isinstance(m, ConvNormLayer):
+                    m.conv = fuse_conv_and_bn(m.conv, m.norm)
+                    delattr(m, 'norm')
                     m.forward = m.forward_fuse
             self.info(verbose=verbose)
 
@@ -1028,6 +1036,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             CSPPC,
             DW_C2f,
             AKConv,
+            ConvNormLayer,
 
         }
     )
@@ -1124,6 +1133,10 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[0]
             c1 = ch[f]
             args = [c1, c2, *args[1:]]
+        elif m is Blocks:
+            block_type = globals()[args[1]]
+            c1, c2 = ch[f], args[0] * block_type.expansion
+            args = [c1, args[0], block_type, *args[2:]]
         elif m is CARAFE:
             c2 = ch[f]
             args = [c2, *args]
