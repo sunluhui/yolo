@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 
-# 加载训练好的模型za
+# 加载训练好的模型zaz
 model = YOLO('runs/detect/train377/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
 
 # 在测试集上进行评估
