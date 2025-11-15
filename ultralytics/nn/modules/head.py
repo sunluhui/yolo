@@ -491,38 +491,8 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        #return x.view(x.shape[0], self.no, -1) # xiugai修改一
-        # 完全替换为以下代码：
-        try:
-            # 如果是tuple，取第一个元素
-            if isinstance(x, tuple):
-                print(f"Warning: Input is tuple with {len(x)} elements, taking first element")
-                for i, item in enumerate(x):
-                    if hasattr(item, 'shape'):
-                        print(f"  Item {i}: shape {item.shape}")
-                    else:
-                        print(f"  Item {i}: type {type(item)}")
-                x = x[0]
+        return x.view(x.shape[0], self.no, -1) # xiugai修改一
 
-            # 确保x是tensor
-            if not isinstance(x, torch.Tensor):
-                raise TypeError(f"Expected tensor, got {type(x)}")
-
-            # 使用reshape而不是view
-            return x.reshape(x.shape[0], self.no, -1)
-
-        except Exception as e:
-            print(f"Error in head reshaping: {e}")
-            print(f"x type: {type(x)}")
-
-            # 创建安全的fallback输出
-            batch_size = 1
-            if isinstance(x, torch.Tensor):
-                batch_size = x.shape[0]
-            elif isinstance(x, tuple) and len(x) > 0 and isinstance(x[0], torch.Tensor):
-                batch_size = x[0].shape[0]
-
-            return torch.zeros(batch_size, self.no, 10, device='cuda' if torch.cuda.is_available() else 'cpu')
 
     def _generate_anchors(self, shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
         """Generates anchor bounding boxes for given shapes with specific grid size and validates them."""
