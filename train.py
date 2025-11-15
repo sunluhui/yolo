@@ -7,7 +7,6 @@ from ultralytics import RTDETR
 # 加载配置xaa
 model = RTDETR(model='me.yaml')#, task='detect')
 torch.use_deterministic_algorithms(False)
-plots = False
 # 训练参数
 model.train(
     data='VisDrone.yaml',  # 数据集配置文件
