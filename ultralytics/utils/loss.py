@@ -211,9 +211,22 @@ class v8DetectionLoss:
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
-        pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc), 1
-        )
+        #pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
+            #(self.reg_max * 4, self.nc), 1
+        #)
+        try:
+            pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
+                (self.reg_max * 4, self.nc), 1)
+        except RuntimeError as e:
+            if "invalid for input of size" in str(e):
+                # 动态计算正确的通道数
+                total_elements = sum(xi.numel() for xi in feats)
+                batch_size = feats[0].shape[0]
+                actual_no = total_elements // (batch_size * (total_elements // (batch_size * self.no)))
+                cat_tensor = torch.cat([xi.view(xi.shape[0], actual_no, -1) for xi in feats], 2)
+                pred_distri, pred_scores = cat_tensor.split((actual_no * 4, actual_no * self.nc), 1)
+            else:
+                raise e
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
