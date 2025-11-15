@@ -15,6 +15,5 @@ model.train(
     batch=8,  # 可设置为更小的，占据更少的空间。
     #val=False,  # 完全跳过验证
     val=False,
-    loggers=None
 )
 
