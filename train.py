@@ -13,5 +13,6 @@ model.train(
     epochs=300,
     imgsz=640,
     batch=8,  # 可设置为更小的，占据更少的空间。
+    val=False,  # 完全跳过验证
 )
 

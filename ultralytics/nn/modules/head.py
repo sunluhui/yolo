@@ -491,7 +491,7 @@ class RTDETRDecoder(nn.Module):
             return x
         # (bs, 300, 4+nc)
         y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        #return x.view(x.shape[0], self.no, -1)
+        #return x.view(x.shape[0], self.no, -1)xiugai修改一
         if isinstance(x, tuple):
             x = x[0]  # 通常情况下，元组的第一个元素是主要的输出张量
         return x
