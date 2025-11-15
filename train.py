@@ -14,7 +14,7 @@ model.train(
     imgsz=640,
     batch=8, # 可设置为更小的，占据更少的空间。
     optimizer='AdamW',
-    lr=0.0001,
+    lr0=0.0001,
     weight_decay=0.0001,
 )
 
