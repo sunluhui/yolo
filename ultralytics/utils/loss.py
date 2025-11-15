@@ -211,47 +211,9 @@ class v8DetectionLoss:
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
-        #pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
-            #(self.reg_max * 4, self.nc), 1
-        #)
-        # 完全替换为：
-        try:
-            # 尝试正常计算
-            pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
-                (self.reg_max * 4, self.nc), 1)
-        except RuntimeError as e:
-            if "invalid for input of size" in str(e):
-                print(f"Debug: Loss calculation error, using alternative method")
-                print(f"self.no: {self.no}, feats shapes: {[f.shape for f in feats]}")
-
-                # 方法1：逐个处理特征图
-                reshaped_feats = []
-                for xi in feats:
-                    batch_size, channels, height, width = xi.shape
-                    # 确保能够被self.no整除
-                    if channels % self.no != 0:
-                        # 如果不能整除，使用最大可能的除数
-                        new_channels = channels - (channels % self.no)
-                        if new_channels > 0:
-                            xi = xi[:, :new_channels, :, :]
-                            reshaped_feats.append(xi.view(batch_size, self.no, -1))
-                        else:
-                            # 如果无法调整，跳过这个特征图
-                            continue
-                    else:
-                        reshaped_feats.append(xi.view(batch_size, self.no, -1))
-
-                if reshaped_feats:
-                    cat_tensor = torch.cat(reshaped_feats, 2)
-                    pred_distri, pred_scores = cat_tensor.split((self.reg_max * 4, self.nc), 1)
-                else:
-                    # 如果所有特征图都无法处理，创建虚拟张量
-                    batch_size = feats[0].shape[0]
-                    device = feats[0].device
-                    pred_distri = torch.zeros(batch_size, self.reg_max * 4, 10, device=device)
-                    pred_scores = torch.zeros(batch_size, self.nc, 10, device=device)
-            else:
-                raise e
+        pred_distri, pred_scores = torch.cat([xi.view(xi.shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
+        )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
