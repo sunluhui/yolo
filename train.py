@@ -10,9 +10,11 @@ torch.use_deterministic_algorithms(False)
 # 训练参数
 model.train(
     data='VisDrone.yaml',  # 数据集配置文件
-    epochs=50,
+    epochs=300,
     imgsz=640,
-    batch=8,  # 可设置为更小的，占据更少的空间。
-    #val=False,  # 完全跳过验证
+    batch=8, # 可设置为更小的，占据更少的空间。
+    optimizer='AdamW',
+    lr=0.0001,
+    weight_decay=0.0001,
 )
 
