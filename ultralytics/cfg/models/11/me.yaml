@@ -47,3 +47,4 @@ head:
 
 
   - [[19, 22, 25], 1, Detect, [nc]] # Detect(P3, P4, P5)
+  #- [[19, 22, 25], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(P3, P4, P5)
