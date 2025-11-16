@@ -5,7 +5,7 @@ import torch
 from ultralytics import YOLO
 from ultralytics import RTDETR
 # 加载配置xaa
-model = RTDETR(model='me.yaml', task='detect')
+model = RTDETR(model='me.yaml')#, task='detect')
 torch.use_deterministic_algorithms(False)
 # 训练参数
 model.train(
