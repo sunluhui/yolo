@@ -12,7 +12,7 @@ model.train(
     data='VisDrone.yaml',  # 数据集配置文件
     epochs=500,
     imgsz=640,
-    batch=8, # 可设置为更小的，占据更少的空间。
+    batch=8, # 可设置为更小的，占据更少的空间。下面的为rtdetr的配置。还得修改训练和测试集的文件头
     optimizer='AdamW',
     lr0=0.0001,
     weight_decay=0.0001,
