@@ -489,9 +489,11 @@ class RTDETRDecoder(nn.Module):
         x = dec_bboxes, dec_scores, enc_bboxes, enc_scores, dn_meta
         if self.training:
             return x
-        # (bs, 300, 4+nc)
-        y = torch.cat((dec_bboxes.squeeze(0), dec_scores.squeeze(0).sigmoid()), -1)
-        return x.view(x.shape[0], self.no, -1) # xiugai修改一
+        # Validation mode: decoder returns (1, bs, 300, 4) and (1, bs, 300, nc), need to squeeze first dim
+        dec_bboxes = dec_bboxes.squeeze(0)  # (bs, 300, 4)
+        dec_scores = dec_scores.squeeze(0)  # (bs, 300, nc)
+        y = torch.cat((dec_bboxes, dec_scores.sigmoid()), -1)  # (bs, 300, 4+nc)
+        return y, x
 
 
 
