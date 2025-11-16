@@ -10,15 +10,7 @@ metrics = model.val(
     data='VisDrone.yaml',  # 数据集配置文件路径
     split='test',  # 指定使用测试集
 )
-metrics = results.box
-if metrics is not None:
-    print(f"mAP50: {metrics.map50:.4f}")
-    print(f"mAP50-95: {metrics.map:.4f}")
-    print(f"Precision: {metrics.p.mean():.4f}")  # 对列表取平均
-    print(f"Recall: {metrics.r.mean():.4f}")     # 对列表取平均
-else:
-    print("No detection results!")
-# 输出评估指标
+
 print(f"mAP50-95: {metrics.box.map:.4f}")    # mAP50-95
 print(f"mAP50: {metrics.box.map50:.4f}")     # mAP50
 print(f"Precision: {metrics.box.p:.4f}")     # 精确率
