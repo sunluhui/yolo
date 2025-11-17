@@ -1,7 +1,7 @@
 from ultralytics import RTDETR
 from ultralytics import YOLO
 # 加载训练好的模型（必须使用RTDETR类加载RT-DETR模型）
-model = YOLO('runs/detect/train419/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
+model = YOLO('runs/detect/train420/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
 
 # 在测试集上进行评估
 metrics = model.val(
