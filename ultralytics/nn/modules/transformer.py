@@ -23,6 +23,7 @@ __all__ = (
     "DeformableTransformerDecoderLayer",
     "MSDeformAttn",
     "MLP",
+    "SBSAtt",
 )
 
 
