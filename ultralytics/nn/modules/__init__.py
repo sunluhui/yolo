@@ -89,7 +89,7 @@ from .transformer import (
     MSDeformAttn,
     TransformerBlock,
     TransformerEncoderLayer,
-    TransformerLayer,
+    TransformerLayer, SBSAtt,
 )
 
 __all__ = (
@@ -139,6 +139,7 @@ __all__ = (
     "RepC3",
     "RTDETRDecoder",
     "AIFI",
+    "SBSAtt",
     "TransformerBlock",
     "DeformableTransformerDecoder",
     "DeformableTransformerDecoderLayer",
