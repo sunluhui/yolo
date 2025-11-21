@@ -89,7 +89,8 @@ from .transformer import (
     MSDeformAttn,
     TransformerBlock,
     TransformerEncoderLayer,
-    TransformerLayer, SBSAtt, FrequencyAttention, ChannelAggregationFFN,
+    TransformerLayer, SBSAtt, FrequencyAttention, ChannelAggregationFFN, CrossModelAtt, EdgeGaussianAggregation, DSAM,
+    FCM, RCSSC, KernelSelectiveFusionAttention,
 )
 
 __all__ = (
@@ -142,6 +143,12 @@ __all__ = (
     "SBSAtt",
     "FrequencyAttention",
     "ChannelAggregationFFN",
+    "CrossModelAtt",
+    "EdgeGaussianAggregation",
+    "DSAM",
+    "FCM",
+    "RCSSC",
+    "KernelSelectiveFusionAttention",
     "TransformerBlock",
     "DeformableTransformerDecoder",
     "DeformableTransformerDecoderLayer",

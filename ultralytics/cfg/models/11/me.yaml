@@ -22,7 +22,7 @@ backbone:
 
 head:
   - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 8 input_proj.2
-  - [-1, 1, ChannelAggregationFFN, []] #- [-1, 1, AIFI, [1024, 8]] # 9
+  - [-1, 1, SBSAtt, []] #- [-1, 1, AIFI, [1024, 8]] # 9
   - [-1, 1, Conv, [256, 1, 1]]  # 10, Y5, lateral_convs.0
 
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 11

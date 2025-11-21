@@ -26,6 +26,12 @@ __all__ = (
     "SBSAtt",
     "FrequencyAttention",
     "ChannelAggregationFFN",
+    "CrossModelAtt",
+    "EdgeGaussianAggregation",
+    "DSAM",
+    "FCM",
+    "RCSSC",
+    "KernelSelectiveFusionAttention",
 )
 
 
@@ -432,7 +438,7 @@ class DeformableTransformerDecoder(nn.Module):
 
 
 class SBSAtt(nn.Module):
-    def __init__(self, dim, num_heads=2, bias=True):
+    def __init__(self, dim, num_heads=8, bias=True):
         super(SBSAtt, self).__init__()
         self.num_heads = num_heads
         self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
@@ -707,5 +713,421 @@ class ChannelAggregationFFN(nn.Module):
         x = self.drop(x)
         return x
 
+
+class CrossModelAtt(nn.Module):
+    def __init__(self, ):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x):
+        img_feat, text_feat = x
+        B, C, H, W = img_feat.shape
+        q = img_feat.view(B, C, -1)
+        k = text_feat.view(B, C, -1).permute(0, 2, 1)
+        attention_map = torch.bmm(q, k)  # [B, C, C]
+        attention_map = self.softmax(attention_map)
+        v = text_feat.view(B, C, -1)
+        attention_info = torch.bmm(attention_map, v)
+        attention_info = attention_info.view(B, C, H, W)
+        output = self.gamma * attention_info + img_feat
+
+        return output
+
+
+try:
+    from mmcv.cnn import build_norm_layer
+except:
+    pass
+
+
+class Conv_Extra(nn.Module):
+    def __init__(self, channel, norm_layer, act_layer):
+        super(Conv_Extra, self).__init__()
+        self.block = nn.Sequential(nn.Conv2d(channel, 64, 1),
+                                   build_norm_layer(norm_layer, 64)[1],
+                                   act_layer(),
+                                   nn.Conv2d(64, 64, 3, stride=1, padding=1, dilation=1, bias=False),
+                                   build_norm_layer(norm_layer, 64)[1],
+                                   act_layer(),
+                                   nn.Conv2d(64, channel, 1),
+                                   build_norm_layer(norm_layer, channel)[1])
+
+    def forward(self, x):
+        out = self.block(x)
+        return out
+
+
+class EdgeGaussianAggregation(nn.Module):
+    def __init__(self, dim, size=3, sigma=1, norm_layer=dict(type='BN', requires_grad=True), act_layer=nn.ReLU,
+                 feature_extra=True):
+        super().__init__()
+        self.feature_extra = feature_extra
+        gaussian = self.gaussian_kernel(size, sigma)
+        gaussian = nn.Parameter(data=gaussian, requires_grad=False).clone()
+        self.gaussian = nn.Conv2d(dim, dim, kernel_size=size, stride=1, padding=int(size // 2), groups=dim, bias=False)
+        self.gaussian.weight.data = gaussian.repeat(dim, 1, 1, 1)
+        self.norm = build_norm_layer(norm_layer, dim)[1]
+        self.act = act_layer()
+        if feature_extra == True:
+            self.conv_extra = Conv_Extra(dim, norm_layer, act_layer)
+
+    def forward(self, x):
+        edges_o = self.gaussian(x)
+        gaussian = self.act(self.norm(edges_o))
+        if self.feature_extra == True:
+            out = self.conv_extra(x + gaussian)
+        else:
+            out = gaussian
+        return out
+
+    def gaussian_kernel(self, size: int, sigma: float):
+        kernel = torch.FloatTensor([
+            [(1 / (2 * math.pi * sigma ** 2)) * math.exp(-(x ** 2 + y ** 2) / (2 * sigma ** 2))
+             for x in range(-size // 2 + 1, size // 2 + 1)]
+            for y in range(-size // 2 + 1, size // 2 + 1)
+        ]).unsqueeze(0).unsqueeze(0)
+        return kernel / kernel.sum()
+
+
+class Pred_Layer(nn.Module):
+    def __init__(self, in_c=256):
+        super(Pred_Layer, self).__init__()
+        self.enlayer = nn.Sequential(
+            nn.Conv2d(in_c, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        self.outlayer = nn.Sequential(
+            nn.Conv2d(256, 1, kernel_size=1, stride=1, padding=0), )
+
+    def forward(self, x):
+        x = self.enlayer(x)
+        x1 = self.outlayer(x)
+        return x, x1
+
+
+class ASPP(nn.Module):
+    def __init__(self, in_c):
+        super(ASPP, self).__init__()
+
+        self.aspp1 = nn.Sequential(
+            nn.Conv2d(in_c, 256, 1, 1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        self.aspp2 = nn.Sequential(
+            nn.Conv2d(in_c, 256, 3, 1, padding=3, dilation=3),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+
+        self.aspp3 = nn.Sequential(
+            nn.Conv2d(in_c, 256, 3, 1, padding=5, dilation=5),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        self.aspp4 = nn.Sequential(
+            nn.Conv2d(in_c, 256, 3, 1, padding=7, dilation=7),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        x1 = self.aspp1(x)
+        x2 = self.aspp2(x)
+        x3 = self.aspp3(x)
+        x4 = self.aspp4(x)
+        x = torch.cat((x1, x2, x3, x4), dim=1)
+
+        return x
+
+
+# Dual-Stream Attention Module
+class DSAM(nn.Module):
+    def __init__(self, in_c):
+        super(DSAM, self).__init__()
+        self.ff_conv = ASPP(in_c)
+        self.bf_conv = ASPP(in_c)
+        self.rgbd_pred_layer = Pred_Layer(256 * 8)
+        self.conv = nn.Conv2d(in_c, 1, 1, 1, 0, )
+
+    def forward(self, x):
+        pred = self.conv(x)
+        feat = x
+        [_, _, H, W] = feat.size()
+        pred = torch.sigmoid(
+            F.interpolate(pred,
+                          size=(H, W),
+                          mode='bilinear',
+                          align_corners=True))
+
+        ff_feat = self.ff_conv(feat * pred)
+        bf_feat = self.bf_conv(feat * (1 - pred))
+        enhanced_feat, new_pred = self.rgbd_pred_layer(torch.cat((ff_feat, bf_feat), 1))
+        # return enhanced_feat, new_pred
+        return enhanced_feat
+
+
+from timm.models.layers import trunc_normal_
+
+
+class ChannelWeights(nn.Module):
+    def __init__(self, dim, reduction=1):
+        super(ChannelWeights, self).__init__()
+        self.dim = dim
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.mlp = nn.Sequential(
+            nn.Linear(self.dim * 6, self.dim * 6 // reduction),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.dim * 6 // reduction, self.dim * 2),
+            nn.Sigmoid())
+
+    def forward(self, x1, x2):
+        B, _, H, W = x1.shape
+        x = torch.cat((x1, x2), dim=1)
+        avg = self.avg_pool(x).view(B, self.dim * 2)
+        std = torch.std(x, dim=(2, 3), keepdim=True).view(B, self.dim * 2)
+        max = self.max_pool(x).view(B, self.dim * 2)
+        y = torch.cat((avg, std, max), dim=1)  # B 6C
+        y = self.mlp(y).view(B, self.dim * 2, 1)
+        channel_weights = y.reshape(B, 2, self.dim, 1, 1).permute(1, 0, 2, 3, 4)  # 2 B C 1 1
+        return channel_weights
+
+
+class SpatialWeights(nn.Module):
+    def __init__(self, dim, reduction=1):
+        super(SpatialWeights, self).__init__()
+        self.dim = dim
+        self.mlp = nn.Sequential(
+            nn.Conv2d(self.dim * 2, self.dim // reduction, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(self.dim // reduction, 2, kernel_size=1),
+            nn.Sigmoid())
+
+    def forward(self, x1, x2):
+        B, _, H, W = x1.shape
+        x = torch.cat((x1, x2), dim=1)  # B 2C H W
+        spatial_weights = self.mlp(x).reshape(B, 2, 1, H, W).permute(1, 0, 2, 3, 4)  # 2 B 1 H W
+        return spatial_weights
+
+
+# 先空间校正再通道校正
+class FCM(nn.Module):
+    def __init__(self, dim, reduction=1, eps=1e-8):
+        super(FCM, self).__init__()
+        # 自定义可训练权重参数
+        self.weights = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.eps = eps
+        self.spatial_weights = SpatialWeights(dim=dim, reduction=reduction)
+        self.channel_weights = ChannelWeights(dim=dim, reduction=reduction)
+
+        self.apply(self._init_weights)
+
+    @classmethod
+    def _init_weights(cls, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        x1, x2 = x
+        weights = nn.ReLU()(self.weights)
+        fuse_weights = weights / (torch.sum(weights, dim=0) + self.eps)
+
+        spatial_weights = self.spatial_weights(x1, x2)
+        x1_1 = x1 + fuse_weights[0] * spatial_weights[1] * x2
+        x2_1 = x2 + fuse_weights[0] * spatial_weights[0] * x1
+
+        channel_weights = self.channel_weights(x1_1, x2_1)
+
+        main_out = x1_1 + fuse_weights[1] * channel_weights[1] * x2_1
+        aux_out = x2_1 + fuse_weights[1] * channel_weights[0] * x1_1
+        # return main_out, aux_out
+        return torch.cat([main_out, aux_out], dim=1)
+
+
+class ChannelPool(nn.Module):
+    def forward(self, x):
+        # 将maxpooling 与 global average pooling 结果拼接在一起
+        return torch.cat((torch.max(x, 1)[0].unsqueeze(1), torch.mean(x, 1).unsqueeze(1)), dim=1)
+
+
+class Basic(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, relu=True, bn=True, bias=False):
+        super(Basic, self).__init__()
+        self.out_channels = out_planes
+        self.conv = nn.Conv2d(in_channels=in_planes, out_channels=out_planes, kernel_size=kernel_size, stride=stride,
+                              padding=padding, bias=bias)
+        self.bn = nn.BatchNorm2d(out_planes, eps=1e-5, momentum=0.01, affine=True) if bn else None
+        self.relu = nn.LeakyReLU() if relu else None
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+
+
+class CALayer(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super(CALayer, self).__init__()
+
+        self.avgPoolW = nn.AdaptiveAvgPool2d((1, None))
+        self.maxPoolW = nn.AdaptiveMaxPool2d((1, None))
+
+        self.conv_1x1 = nn.Conv2d(in_channels=2 * channel, out_channels=2 * channel, kernel_size=1, padding=0, stride=1,
+                                  bias=False)
+        self.bn = nn.BatchNorm2d(2 * channel, eps=1e-5, momentum=0.01, affine=True)
+        self.Relu = nn.LeakyReLU()
+
+        self.F_h = nn.Sequential(  # 激发操作
+            nn.Conv2d(channel, channel // reduction, 1, padding=0, bias=True),
+            nn.BatchNorm2d(channel // reduction, eps=1e-5, momentum=0.01, affine=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channel // reduction, channel, 1, padding=0, bias=True),
+        )
+        self.F_w = nn.Sequential(  # 激发操作
+            nn.Conv2d(channel, channel // reduction, 1, padding=0, bias=True),
+            nn.BatchNorm2d(channel // reduction, eps=1e-5, momentum=0.01, affine=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channel // reduction, channel, 1, padding=0, bias=True),
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        N, C, H, W = x.size()
+        res = x
+        x_cat = torch.cat([self.avgPoolW(x), self.maxPoolW(x)], 1)
+        x = self.Relu(self.bn(self.conv_1x1(x_cat)))
+        x_1, x_2 = x.split(C, 1)
+
+        x_1 = self.F_h(x_1)
+        x_2 = self.F_w(x_2)
+        s_h = self.sigmoid(x_1)
+        s_w = self.sigmoid(x_2)
+
+        out = res * s_h.expand_as(res) * s_w.expand_as(res)
+
+        return out
+
+
+class spatial_attn_layer(nn.Module):
+    def __init__(self, kernel_size=3):
+        super(spatial_attn_layer, self).__init__()
+        self.compress = ChannelPool()
+        self.spatial = Basic(2, 1, kernel_size, stride=1, padding=(kernel_size - 1) // 2, bn=False, relu=False)
+
+    def forward(self, x):
+        x_compress = self.compress(x)
+        x_out = self.spatial(x_compress)
+        scale = torch.sigmoid(x_out)  # broadcasting
+        return x * scale
+
+
+class RCSSC(nn.Module):
+    def __init__(self, n_feat, reduction=16):
+        super(RCSSC, self).__init__()
+        pooling_r = 4
+        self.head = nn.Sequential(
+            nn.Conv2d(in_channels=n_feat, out_channels=n_feat, kernel_size=3, padding=1, stride=1, bias=True),
+            nn.LeakyReLU(),
+        )
+        self.SC = nn.Sequential(
+            nn.AvgPool2d(kernel_size=pooling_r, stride=pooling_r),
+            nn.Conv2d(in_channels=n_feat, out_channels=n_feat, kernel_size=3, padding=1, stride=1, bias=True),
+            nn.BatchNorm2d(n_feat)
+        )
+        self.SA = spatial_attn_layer()  ## Spatial Attention
+        self.CA = CALayer(n_feat, reduction)  ## Channel Attention
+
+        self.conv1x1 = nn.Sequential(
+            nn.Conv2d(n_feat * 2, n_feat, kernel_size=1),
+            nn.Conv2d(in_channels=n_feat, out_channels=n_feat, kernel_size=3, padding=1, stride=1, bias=True)
+        )
+        self.ReLU = nn.LeakyReLU()
+        self.tail = nn.Conv2d(in_channels=n_feat, out_channels=n_feat, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        res = x
+        x = self.head(x)
+        sa_branch = self.SA(x)
+        ca_branch = self.CA(x)
+        x1 = torch.cat([sa_branch, ca_branch], dim=1)  # 拼接
+        x1 = self.conv1x1(x1)
+        x2 = torch.sigmoid(
+            torch.add(x, F.interpolate(self.SC(x), x.size()[2:])))
+        out = torch.mul(x1, x2)
+        out = self.tail(out)
+        out = out + res
+        out = self.ReLU(out)
+        return out
+
+
+class KernelSelectiveFusionAttention(nn.Module):
+    def __init__(self, dim, r=16, L=32):
+        super().__init__()
+        d = max(dim // r, L)
+        self.conv0 = nn.Conv2d(dim, dim, 3, padding=1, groups=dim)
+        self.conv_spatial = nn.Conv2d(dim, dim, 5, stride=1, padding=4, groups=dim, dilation=2)
+        self.conv1 = nn.Conv2d(dim, dim // 2, 1)
+        self.conv2 = nn.Conv2d(dim, dim // 2, 1)
+        self.conv_squeeze = nn.Conv2d(2, 2, 7, padding=3)
+        self.conv = nn.Conv2d(dim // 2, dim, 1)
+
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.global_maxpool = nn.AdaptiveMaxPool2d(1)
+        self.fc1 = nn.Sequential(
+            nn.Conv2d(dim, d, 1, bias=False),
+            nn.BatchNorm2d(d),
+            nn.ReLU(inplace=True)
+        )
+        self.fc2 = nn.Conv2d(d, dim, 1, 1, bias=False)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        dim = x.size(1)
+        attn1 = self.conv0(x)  # conv_3*3
+        attn2 = self.conv_spatial(attn1)  # conv_3*3 -> conv_5*5
+
+        attn1 = self.conv1(attn1)  # b, dim/2, h, w
+        attn2 = self.conv2(attn2)  # b, dim/2, h, w
+
+        attn = torch.cat([attn1, attn2], dim=1)  # b,c,h,w
+        avg_attn = torch.mean(attn, dim=1, keepdim=True)  # b,1,h,w
+        max_attn, _ = torch.max(attn, dim=1, keepdim=True)  # b,1,h,w
+        agg = torch.cat([avg_attn, max_attn], dim=1)  # spa b,2,h,w
+
+        ch_attn1 = self.global_pool(attn)  # b,dim,1, 1
+        z = self.fc1(ch_attn1)
+        a_b = self.fc2(z)
+        a_b = a_b.reshape(batch_size, 2, dim // 2, -1)
+        a_b = self.softmax(a_b)
+
+        a1, a2 = a_b.chunk(2, dim=1)
+        a1 = a1.reshape(batch_size, dim // 2, 1, 1)
+        a2 = a2.reshape(batch_size, dim // 2, 1, 1)
+
+        w1 = a1 * agg[:, 0, :, :].unsqueeze(1)
+        w2 = a2 * agg[:, 0, :, :].unsqueeze(1)
+
+        attn = attn1 * w1 + attn2 * w2
+        attn = self.conv(attn).sigmoid()
+
+        return x * attn
 
 
