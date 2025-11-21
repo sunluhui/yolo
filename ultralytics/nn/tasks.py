@@ -71,7 +71,7 @@ from ultralytics.nn.modules import (
     WorldDetect,
     v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock, SPPCSPC,
     MultiBranchAttention, ChannelAttention, SpatialAttention, LocalContextAttention, GlobalContextAttention, MS_CAM,
-    ELA, SBSAtt, FrequencyAttention
+    ELA, SBSAtt, FrequencyAttention, ChannelAggregationFFN
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import Fusion
@@ -1104,7 +1104,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             args = [ch[f], *args[1:]]
         elif m in {SimAM, MLKA}:
             c2 = ch[f]
-        elif m in {AIFI, TransformerBlock, SBSAtt, FrequencyAttention}:
+        elif m in {AIFI, TransformerBlock, SBSAtt, FrequencyAttention, ChannelAggregationFFN}:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):
             c1, cm, c2 = ch[f], args[0], args[1]

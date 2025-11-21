@@ -89,7 +89,7 @@ from .transformer import (
     MSDeformAttn,
     TransformerBlock,
     TransformerEncoderLayer,
-    TransformerLayer, SBSAtt, FrequencyAttention,
+    TransformerLayer, SBSAtt, FrequencyAttention, ChannelAggregationFFN,
 )
 
 __all__ = (
@@ -141,6 +141,7 @@ __all__ = (
     "AIFI",
     "SBSAtt",
     "FrequencyAttention",
+    "ChannelAggregationFFN",
     "TransformerBlock",
     "DeformableTransformerDecoder",
     "DeformableTransformerDecoderLayer",
