@@ -525,7 +525,7 @@ class SBSAtt(nn.Module):
         idx = self.get_idx(x)
         b, c = x.shape[:2]
         x = x.contiguous().view(b, c, -1)
-        x = torch.gather(x, 2, index=idx.repeat(b, c, 1))  # b, 6c, h*(w//2+1)
+        x = torch.gather(x, 2, index=idx.repeat(b, c, 1).to(x.device))  # b, 6c, h*(w//2+1)#x = torch.gather(x, 2, index=idx.repeat(b, c, 1))  # b, 6c, h*(w//2+1)
         return x, pad, idx
 
     def ifft(self, x, pad, idx, h):
