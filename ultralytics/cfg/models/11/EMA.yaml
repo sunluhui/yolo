@@ -1,6 +1,6 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 # RT-DETR-ResNet50 Optimized for Small Object Detection
-# Strategic Placement of EMA Attention and Haar Wavelet Downsampling
+# Strategic Placement of Haar Wavelet Downsampling
 
 # Parameters
 nc: 80
@@ -20,39 +20,35 @@ backbone:
 
   # 🎯 关键HWD位置2: P3层下采样 - 小目标最丰富层
   - [-1, 1, HWD, [128]] # 5-P3/8
-  - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']] # 6
-  # 🎯 关键EMA位置1: P3层注意力 - 直接增强小目标特征
-  - [-1, 1, BiLevelRoutingAttention, [128]] # 7-P3-EMA
+  - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']] # 6-P3/8
 
   # 恢复普通下采样 - P4/P5层小目标信息较少
-  - [-1, 1, Blocks, [256, BasicBlock, 2, 4, 'relu']] # 8-P4/16
-  - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']] # 9-P5/32
+  - [-1, 1, Blocks, [256, BasicBlock, 2, 4, 'relu']] # 7-P4/16
+  - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']] # 8-P5/32
 
 head:
-  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 10 input_proj.2
-  - [-1, 1, AIFI, [1024, 8]] # 11
-  - [-1, 1, Conv, [256, 1, 1]]  # 12, Y5, lateral_convs.0
+  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 9 input_proj.2
+  - [-1, 1, AIFI, [1024, 8]] # 10
+  - [-1, 1, Conv, [256, 1, 1]]  # 11, Y5, lateral_convs.0
 
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 13
-  - [8, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 14 input_proj.1 (来自P4)
-  - [[-2, -1], 1, Concat, [1]] # 15
-  - [-1, 3, RepC3, [256, 0.5]]  # 16, fpn_blocks.0
-  - [-1, 1, Conv, [256, 1, 1]]   # 17, Y4, lateral_convs.1
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 12
+  - [7, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 13 input_proj.1 (来自P4)
+  - [[-2, -1], 1, Concat, [1]] # 14
+  - [-1, 3, RepC3, [256, 0.5]]  # 15, fpn_blocks.0
+  - [-1, 1, Conv, [256, 1, 1]]   # 16, Y4, lateral_convs.1
 
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 18
-  - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 19 input_proj.0 (来自P3)
-  - [[-2, -1], 1, Concat, [1]]  # 20 cat backbone P3
-  - [-1, 3, RepC3, [256, 0.5]]    # 21, fpn_blocks.1
-  # 🎯 关键EMA位置2: FPN输出 - 增强最终小目标特征表示
-  - [-1, 1, BiLevelRoutingAttention, [256]] # 22-FPN-EMA
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 17
+  - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 18 input_proj.0 (来自P3)
+  - [[-2, -1], 1, Concat, [1]]  # 19 cat backbone P3
+  - [-1, 3, RepC3, [256, 0.5]]    # 20, fpn_blocks.1
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 23, downsample_convs.0
-  - [[-1, 17], 1, Concat, [1]]  # 24 cat Y4
-  - [-1, 3, RepC3, [256, 0.5]]    # 25, pan_blocks.0
+  - [-1, 1, Conv, [256, 3, 2]]   # 21, downsample_convs.0
+  - [[-1, 16], 1, Concat, [1]]  # 22 cat Y4
+  - [-1, 3, RepC3, [256, 0.5]]    # 23, pan_blocks.0
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 26, downsample_convs.1
-  - [[-1, 12], 1, Concat, [1]]  # 27 cat Y5
-  - [-1, 3, RepC3, [256, 0.5]]    # 28, pan_blocks.1
+  - [-1, 1, Conv, [256, 3, 2]]   # 24, downsample_convs.1
+  - [[-1, 11], 1, Concat, [1]]  # 25 cat Y5
+  - [-1, 3, RepC3, [256, 0.5]]    # 26, pan_blocks.1
 
   # 检测层索引更新
-  - [[22, 25, 28], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(22,25,28)
+  - [[20, 23, 26], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(20,23,26)
