@@ -1,8 +1,11 @@
+import torch
+
 from ultralytics import RTDETR
 from ultralytics import YOLO
 # 加载训练好的模型（必须使用RTDETR类加载RT-DETR模型）
 model = RTDETR('runs/detect/train428/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
-model.val(device=0)  # 明确指定使用GPU 0
+torch.cuda.set_device(0)  # 设置使用GPU 0
+model = model.cuda()  # 确保模型在GPU上
 # 在测试集上进行评估
 metrics = model.val(
     data='VisDrone.yaml',  # 数据集配置文件路径
