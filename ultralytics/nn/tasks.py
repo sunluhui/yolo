@@ -79,7 +79,7 @@ from ultralytics.nn.modules.bifpn import Fusion
 from ultralytics.nn.modules.block import CoordAtt, CA_RFA_SPPF, DynamicSPPF, CA_RFA_EnhancedSPPF, \
     AdvancedCA_RFA_EnhancedSPPF, AdaptiveSPPF, FocalModulation, SPPFA, SPPF_DC, SPPF_Att, SPPF_GAP, SPPF_MultiScale, \
     DroneSPPF, FusionSPPF, ImprovedSPPF, EfficientViMBlock
-from ultralytics.nn.modules.biformer import BiFormerBlock
+from ultralytics.nn.modules.biformer import BiLevelRoutingAttention
 from ultralytics.nn.modules.block import SPPFCSPC
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -1102,8 +1102,9 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             if c2 != nc:
                 c2 = make_divisible(min(c2, max_channels) * width, 8)
             args = [c1, *args[1:]]
-        elif m in {BiFormerBlock}:
-            args = [ch[f], *args[1:]]
+        elif m in {BiLevelRoutingAttention}:
+            c2 = ch[f]
+            args = [c2, *args]
         elif m in {SimAM, MLKA}:
             c2 = ch[f]
         elif m in {AIFI, TransformerBlock, SBSAtt, FrequencyAttention, ChannelAggregationFFN, CrossModelAtt, EdgeGaussianAggregation, DSAM, FCM, RCSSC, KernelSelectiveFusionAttention}:

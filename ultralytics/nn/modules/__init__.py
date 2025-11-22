@@ -17,6 +17,7 @@ Example:
     ```
 """
 from .DWConv_and_DWConvC2f import DW_C2f
+from .biformer import BiLevelRoutingAttention
 from .block import (
     C1,
     C2,
@@ -213,6 +214,7 @@ __all__ = (
     "BasicBlock",
     "BottleNeck",
     "EfficientViMBlock",
+    "BiLevelRoutingAttention",
 )
 from .CSPPC import CSPPC
 from .ela import ELA
