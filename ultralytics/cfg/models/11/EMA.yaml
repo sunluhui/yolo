@@ -1,0 +1,52 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# Ultralytics RT-DETR-ResNet50 with Efficient Multi-Scale Attention
+# Enhanced for small object detection with multi-scale attention mechanisms
+
+# Parameters
+nc: 80 # number of classes
+scales: # model compound scaling constants
+  l: [1.00, 1.00, 1024]
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, ConvNormLayer, [32, 3, 2, None, False, 'relu']] # 0-P1/2
+  - [-1, 1, ConvNormLayer, [32, 3, 1, None, False, 'relu']] # 1
+  - [-1, 1, ConvNormLayer, [64, 3, 1, None, False, 'relu']] # 2
+  - [-1, 1, nn.MaxPool2d, [3, 2, 1]] # 3-P2/4
+
+  - [-1, 1, Blocks, [64, BasicBlock, 2, 2, 'relu']] # 4
+  - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']] # 5-P3/8
+  - [-1, 1, Blocks, [256, BasicBlock, 2, 4, 'relu']] # 6-P4/16
+  - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']] # 7-P5/32
+
+head:
+  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 8 input_proj.2
+  - [-1, 1, AIFI, [1024, 8]] # 9
+  - [-1, 1, Conv, [256, 1, 1]]  # 10, Y5, lateral_convs.0
+
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 11
+  - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 12 input_proj.1
+  - [[-2, -1], 1, Concat, [1]] # 13
+  # 🔥 添加第一个高效多尺度注意力 - FPN第一个融合点
+  - [-1, 1, EMA_attention, [256]] # 14-FPN多尺度融合
+  - [-1, 3, RepC3, [256, 0.5]]  # 15, fpn_blocks.0 (原14)
+  - [-1, 1, Conv, [256, 1, 1]]   # 16, Y4, lateral_convs.1 (原15)
+
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 17 (原16)
+  - [5, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 18 input_proj.0 (原17)
+  - [[-2, -1], 1, Concat, [1]]  # 19 cat backbone P4 (原18)
+  # 🔥 添加第二个高效多尺度注意力 - 高层特征融合点
+  - [-1, 1, EMA_attention, [256]] # 20-高层多尺度融合
+  - [-1, 3, RepC3, [256, 0.5]]    # 21, fpn_blocks.1 (原19)
+
+  - [-1, 1, Conv, [256, 3, 2]]   # 22, downsample_convs.0 (原20)
+  - [[-1, 16], 1, Concat, [1]]  # 23 cat Y4 (原21)
+  - [-1, 3, RepC3, [256, 0.5]]    # 24, pan_blocks.0 (原22)
+
+  - [-1, 1, Conv, [256, 3, 2]]   # 25, downsample_convs.1 (原23)
+  - [[-1, 10], 1, Concat, [1]]  # 26 cat Y5 (原24)
+  - [-1, 3, RepC3, [256, 0.5]]    # 27, pan_blocks.1 (原25)
+
+  # 检测层索引更新为新的层编号
+  - [[21, 24, 27], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(21,24,27)
