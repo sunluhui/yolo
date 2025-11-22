@@ -1,10 +1,9 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-# Enhanced RT-DETR-ResNet50 with BiFormerBlock for Small Object Detection
-# Model docs: https://docs.ultralytics.com/models/rtdetr
-# Task docs: https://docs.ultralytics.com/tasks/detect
+# Optimized RT-DETR-ResNet50 with EfficientViMBlock for Small Object Detection
+
 # Parameters
-nc: 80 # number of classes
-scales: # model compound scaling constants
+nc: 80
+scales:
   l: [1.00, 1.00, 1024]
 
 backbone:
@@ -16,40 +15,42 @@ backbone:
 
   - [-1, 1, Blocks, [64, BasicBlock, 2, 2, 'relu']] # 4
   - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']] # 5-P3/8
-  # 🔥 在P3层后添加BiFormerBlock - 增强小目标基础特征提取 [citation:2][citation:10]
-  - [-1, 1, BiFormerBlock, [128, 4, 7, 2]] # 6-P3/8-BiFormer (dim=128, heads=4, n_win=7, topk=2)
+  # 💎 核心：在P3层后保留EfficientViMBlock - 增强小目标基础特征 (dim=128, mlp_ratio=4, ssd_expand=1, state_dim=64)
+  - [-1, 1, EfficientViMBlock, [128, 4, 1, 64]] # 6-P3-EfficientViM
 
   - [-1, 1, Blocks, [256, BasicBlock, 2, 4, 'relu']] # 7-P4/16
-  - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']] # 8-P5/32
+  # ✂️ 可选移除：P4层的EfficientViMBlock，权衡效率与性能
+  # - [-1, 1, EfficientViMBlock, [256, 4, 1, 64]] # 8-P4-EfficientViM
+
+  - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']] # 8-P5/32 (原第9层，索引因移除而更新)
 
 head:
-  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 9 input_proj.2
-  - [-1, 1, AIFI, [1024, 8]] # 10
-  - [-1, 1, Conv, [256, 1, 1]]  # 11, Y5, lateral_convs.0
+  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 9 input_proj.2 (原第10层)
+  - [-1, 1, AIFI, [1024, 8]] # 10 (原第11层)
+  - [-1, 1, Conv, [256, 1, 1]]  # 11, Y5, lateral_convs.0 (原第12层)
 
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 12
-  - [7, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 13 input_proj.1
-  - [[-2, -1], 1, Concat, [1]] # 14
-  - [-1, 3, RepC3, [256, 0.5]]  # 15, fpn_blocks.0
-  - [-1, 1, Conv, [256, 1, 1]]   # 16, Y4, lateral_convs.1
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 12 (原第13层)
+  - [7, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 13 input_proj.1 (原第14层，指向P4)
+  - [[-2, -1], 1, Concat, [1]] # 14 (原第15层)
+  - [-1, 3, RepC3, [256, 0.5]]  # 15, fpn_blocks.0 (原第16层)
+  - [-1, 1, Conv, [256, 1, 1]]   # 16, Y4, lateral_convs.1 (原第17层)
 
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 17
-  - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 18 input_proj.0 (注意索引指向P3层的BiFormer输出)
-  - [[-2, -1], 1, Concat, [1]]  # 19 cat backbone P3
-  # 🔥 在FPN高层特征融合后添加BiFormerBlock - 优化多尺度特征融合 [citation:6]
-  - [-1, 1, BiFormerBlock, [256, 8, 7, 4]] # 20-FPN-BiFormer (dim=256, heads=8, n_win=7, topk=4)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 17 (原第18层)
+  - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 18 input_proj.0 (原第19层，指向P3的EfficientViMBlock输出)
+  - [[-2, -1], 1, Concat, [1]]  # 19 cat backbone P3 (原第20层)
+  - [-1, 3, RepC3, [256, 0.5]]    # 20, fpn_blocks.1 (原第21层)
+  # 💎 核心：在FPN输出后保留EfficientViMBlock - 增强小目标最终特征 (dim=256, mlp_ratio=4, ssd_expand=1, state_dim=64)
+  - [-1, 1, EfficientViMBlock, [256, 4, 1, 64]] # 21-FPN-EfficientViM (原第22层)
 
-  - [-1, 3, RepC3, [256, 0.5]]    # 21, fpn_blocks.1
+  - [-1, 1, Conv, [256, 3, 2]]   # 22, downsample_convs.0 (原第23层)
+  - [[-1, 16], 1, Concat, [1]]  # 23 cat Y4 (原第24层)
+  - [-1, 3, RepC3, [256, 0.5]]    # 24, pan_blocks.0 (原第25层)
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 22, downsample_convs.0
-  - [[-1, 16], 1, Concat, [1]]  # 23 cat Y4
-  - [-1, 3, RepC3, [256, 0.5]]    # 24, pan_blocks.0
+  - [-1, 1, Conv, [256, 3, 2]]   # 25, downsample_convs.1 (原第26层)
+  - [[-1, 11], 1, Concat, [1]]  # 26 cat Y5 (原第27层)
+  - [-1, 3, RepC3, [256, 0.5]]    # 27, pan_blocks.1 (原第28层)
+  # ✂️ 建议移除：PAN输出层的EfficientViMBlock，优先保证效率
+  # - [-1, 1, EfficientViMBlock, [256, 4, 1, 64]] # 28-PAN-EfficientViM (原第29层)
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 25, downsample_convs.1
-  - [[-1, 11], 1, Concat, [1]]  # 26 cat Y5
-  # 🔥 在PAN路径底层特征融合后添加BiFormerBlock - 增强大感受野特征 [citation:9]
-  - [-1, 1, BiFormerBlock, [256, 8, 7, 4]] # 27-PAN-BiFormer (dim=256, heads=8, n_win=7, topk=4)
-  - [-1, 3, RepC3, [256, 0.5]]    # 28, pan_blocks.1
-
-  # 检测层索引更新为新的层编号
-  - [[21, 24, 28], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(P3, P4, P5)
+  # 检测层索引更新 (注意：移除了PAN输出层的模块，所以最后一个特征层是27)
+  - [[21, 24, 27], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(21,24,27)
