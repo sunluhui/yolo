@@ -42,7 +42,7 @@ head:
   - [-1, 1, Conv, [256, 1, 1]]  # 15, Y5, lateral_convs.0
 
   # 🔥 替换最近邻上采样为CARAFE内容感知上采样
-  - [-1, 1, CARAFE, [256]] # 16 (替换nn.Upsample)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 16 (替换nn.Upsample)
 
   - [9, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 17 input_proj.1 (来自P4层)
   - [[-2, -1], 1, Concat, [1]] # 18
@@ -52,7 +52,7 @@ head:
   - [-1, 1, Conv, [256, 1, 1]]   # 21, Y4, lateral_convs.1
 
   # 🔥 第二个CARAFE上采样
-  - [-1, 1, CARAFE, [256]] # 22 (替换nn.Upsample)
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 22 (替换nn.Upsample)
 
   - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 23 input_proj.0 (来自P3层)
   - [[-2, -1], 1, Concat, [1]]  # 24 cat backbone P3
