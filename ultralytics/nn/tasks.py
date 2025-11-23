@@ -972,6 +972,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
     base_modules = frozenset(
         {
             HWD,
+            Mona,
             Classify,
             Conv,
             ConvTranspose,
