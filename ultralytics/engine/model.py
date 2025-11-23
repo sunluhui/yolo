@@ -624,7 +624,7 @@ class Model(torch.nn.Module):
             **kwargs: Arbitrary keyword arguments for customizing the validation process.
 
         Returns:
-            (ultralytics.utils.metrics.DetMetrics): Validation metrics obtained from the validation process.
+            (ultralytics.utils.metrics1.DetMetrics): Validation metrics obtained from the validation process.
 
         Raises:
             AssertionError: If the model is not a PyTorch model.

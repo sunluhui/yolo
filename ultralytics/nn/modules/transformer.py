@@ -438,7 +438,7 @@ class DeformableTransformerDecoder(nn.Module):
 
 
 class SBSAtt(nn.Module):
-    def __init__(self, dim, num_heads=8, bias=True):
+    def __init__(self, dim, num_heads=4, bias=True):
         super(SBSAtt, self).__init__()
         self.num_heads = num_heads
         self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
