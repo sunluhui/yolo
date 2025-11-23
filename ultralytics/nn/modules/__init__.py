@@ -16,6 +16,7 @@ Example:
     os.system(f"onnxslim {f} {f} && open {f}")  # pip install onnxslim
     ```
 """
+from .AFE import C2f_AFE
 from .DWConv_and_DWConvC2f import DW_C2f
 from .biformer import BiLevelRoutingAttention
 from .block import (
@@ -215,6 +216,7 @@ __all__ = (
     "BottleNeck",
     "EfficientViMBlock",
     "BiLevelRoutingAttention",
+    "C2f_AFE",
 )
 from .CSPPC import CSPPC
 from .ela import ELA

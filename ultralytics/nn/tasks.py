@@ -72,7 +72,7 @@ from ultralytics.nn.modules import (
     v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock, SPPCSPC,
     MultiBranchAttention, ChannelAttention, SpatialAttention, LocalContextAttention, GlobalContextAttention, MS_CAM,
     ELA, SBSAtt, FrequencyAttention, ChannelAggregationFFN, CrossModelAtt, EdgeGaussianAggregation, DSAM, FCM, RCSSC,
-    KernelSelectiveFusionAttention
+    KernelSelectiveFusionAttention, C2f_AFE
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import Fusion
@@ -1041,6 +1041,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             AKConv,
             ConvNormLayer,
             EfficientViMBlock,
+            C2f_AFE,
 
         }
     )
