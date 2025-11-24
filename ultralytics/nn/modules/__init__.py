@@ -18,7 +18,7 @@ Example:
 """
 from .AFE import C2f_AFE
 from .DWConv_and_DWConvC2f import DW_C2f
-from .biformer import BiLevelRoutingAttention
+from .biformer import BiLevelRoutingAttention, BiFormerBlock
 from .block import (
     C1,
     C2,
@@ -217,6 +217,7 @@ __all__ = (
     "EfficientViMBlock",
     "BiLevelRoutingAttention",
     "C2f_AFE",
+    "BiFormerBlock",
 )
 from .CSPPC import CSPPC
 from .ela import ELA

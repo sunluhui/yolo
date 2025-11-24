@@ -1,14 +1,9 @@
-"""
-Bi-Level Routing Attention.
-"""
-from typing import Tuple, Optional
+######################  BiLevelRoutingAttention  ####  AI&CV   start ###############################
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
-from torch import Tensor, LongTensor
-
-__all__ = ['BiLevelRoutingAttention']
+import torch.nn.functional as F
+from torch import Tensor, nn
+from ultralytics.nn.modules import Conv
 
 
 class TopkRouting(nn.Module):
@@ -34,7 +29,7 @@ class TopkRouting(nn.Module):
         # routing activation
         self.routing_act = nn.Softmax(dim=-1)
 
-    def forward(self, query: Tensor, key: Tensor) -> Tuple[Tensor]:
+    def forward(self, query: Tensor, key: Tensor) -> Tensor:
         """
         Args:
             q, k: (n, p^2, c) tensor
@@ -49,6 +44,20 @@ class TopkRouting(nn.Module):
         r_weight = self.routing_act(topk_attn_logit)  # (n, p^2, k)
 
         return r_weight, topk_index
+
+
+class QKVLinear(nn.Module):
+    def __init__(self, dim, qk_dim, bias=True):
+        super().__init__()
+        self.dim = dim
+        self.qk_dim = qk_dim
+        self.qkv = nn.Linear(dim, qk_dim + qk_dim + dim, bias=bias)
+
+    def forward(self, x):
+        q, kv = self.qkv(x).split([self.qk_dim, self.qk_dim + self.dim], dim=-1)
+        return q, kv
+        # q, k, v = self.qkv(x).split([self.qk_dim, self.qk_dim, self.dim], dim=-1)
+        # return q, k, v
 
 
 class KVGather(nn.Module):
@@ -87,20 +96,6 @@ class KVGather(nn.Module):
         return topk_kv
 
 
-class QKVLinear(nn.Module):
-    def __init__(self, dim, qk_dim, bias=True):
-        super().__init__()
-        self.dim = dim
-        self.qk_dim = qk_dim
-        self.qkv = nn.Linear(dim, qk_dim + qk_dim + dim, bias=bias)
-
-    def forward(self, x):
-        q, kv = self.qkv(x).split([self.qk_dim, self.qk_dim + self.dim], dim=-1)
-        return q, kv
-        # q, k, v = self.qkv(x).split([self.qk_dim, self.qk_dim, self.dim], dim=-1)
-        # return q, k, v
-
-
 class BiLevelRoutingAttention(nn.Module):
     """
     n_win: number of windows in one side (so the actual number of windows is n_win*n_win)
@@ -112,10 +107,10 @@ class BiLevelRoutingAttention(nn.Module):
     soft_routing: wether to multiply soft routing weights
     """
 
-    def __init__(self, dim, n_win=7, num_heads=8, qk_dim=None, qk_scale=None,
-                 kv_per_win=4, kv_downsample_ratio=4, kv_downsample_kernel=None, kv_downsample_mode='identity',
-                 topk=4, param_attention="qkvo", param_routing=False, diff_routing=False, soft_routing=False,
-                 side_dwconv=3,
+    def __init__(self, dim, num_heads=8, n_win=7, qk_dim=None, qk_scale=None,
+                 kv_per_win=4, kv_downsample_ratio=4, kv_downsample_kernel='ada_avgpool', kv_downsample_mode='identity',
+                 topk=4, param_attention="qkv", param_routing=False, diff_routing=False, soft_routing=False,
+                 side_dwconv=5,
                  auto_pad=True):
         super().__init__()
         # local attention setting
@@ -123,7 +118,9 @@ class BiLevelRoutingAttention(nn.Module):
         self.n_win = n_win  # Wh, Ww
         self.num_heads = num_heads
         self.qk_dim = qk_dim or dim
+
         assert self.qk_dim % num_heads == 0 and self.dim % num_heads == 0, 'qk_dim and dim must be divisible by num_heads!'
+
         self.scale = qk_scale or self.qk_dim ** -0.5
 
         ################side_dwconv (i.e. LCE in ShuntedTransformer)###########
@@ -204,21 +201,26 @@ class BiLevelRoutingAttention(nn.Module):
         Return:
             NHWC tensor
         """
-        x = rearrange(x, "n c h w -> n h w c")
         # NOTE: use padding for semantic segmentation
         ###################################################
+
         if self.auto_pad:
             N, H_in, W_in, C = x.size()
 
             pad_l = pad_t = 0
             pad_r = (self.n_win - W_in % self.n_win) % self.n_win
             pad_b = (self.n_win - H_in % self.n_win) % self.n_win
+
             x = F.pad(x, (0, 0,  # dim=-1
                           pad_l, pad_r,  # dim=-2
                           pad_t, pad_b))  # dim=-3
             _, H, W, _ = x.size()  # padded size
         else:
             N, H, W, C = x.size()
+            # print(N)
+            # print(H)
+            # print(W)
+            # print(self.n_win)
             assert H % self.n_win == 0 and W % self.n_win == 0  #
         ###################################################
 
@@ -284,4 +286,43 @@ class BiLevelRoutingAttention(nn.Module):
         if ret_attn_mask:
             return out, r_weight, r_idx, attn_weight
         else:
-            return rearrange(out, "n h w c -> n c h w")
+            return out
+
+
+class BiFormerBlock(nn.Module):
+    def __init__(self, dim, drop_path=0.,
+                 num_heads=8, n_win=7, qk_dim=None, qk_scale=None,
+                 kv_per_win=4, kv_downsample_ratio=4, kv_downsample_kernel=None, kv_downsample_mode='ada_avgpool',
+                 topk=4, param_attention="qkvo", param_routing=False, diff_routing=False, soft_routing=False,
+                 mlp_ratio=2, mlp_dwconv=False,
+                 side_dwconv=3, before_attn_dwconv=3, pre_norm=True, auto_pad=True):
+        super().__init__()
+        qk_dim = qk_dim or dim
+
+        self.attn = BiLevelRoutingAttention(dim=dim, num_heads=num_heads, n_win=n_win, qk_dim=qk_dim,
+                                            qk_scale=qk_scale, kv_per_win=kv_per_win,
+                                            kv_downsample_ratio=kv_downsample_ratio,
+                                            kv_downsample_kernel=kv_downsample_kernel,
+                                            kv_downsample_mode=kv_downsample_mode,
+                                            topk=topk, param_attention=param_attention, param_routing=param_routing,
+                                            diff_routing=diff_routing, soft_routing=soft_routing,
+                                            side_dwconv=side_dwconv,
+                                            auto_pad=auto_pad)
+
+    def forward(self, x):
+        """
+        x: NCHW tensor
+        """
+
+        # permute to NHWC tensor for attention & mlp
+        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+
+        x = self.attn(x)  # (N, H, W, C)
+
+        # permute back
+        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+        return x
+
+
+
+######################  BiLevelRoutingAttention  ####     end ###############################
