@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ultralytics.utils.loss1 import FocalLoss, VarifocalLoss
-from ultralytics.utils.metrics1 import bbox_iou
+from ultralytics.utils.loss import FocalLoss, VarifocalLoss
+from ultralytics.utils.metrics import bbox_iou
 
 from .ops import HungarianMatcher
 

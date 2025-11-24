@@ -83,7 +83,7 @@ from ultralytics.nn.modules.biformer import BiLevelRoutingAttention
 from ultralytics.nn.modules.block import SPPFCSPC
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.utils.loss1 import (
+from ultralytics.utils.loss import (
     E2EDetectLoss,
     v8ClassificationLoss,
     v8DetectionLoss,
