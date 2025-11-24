@@ -63,4 +63,4 @@ head:
   - [-1, 2, RepC3, [256, 0.5]]  # Enhanced X3 (33)
 
   # Detection head with P2, P3, P4, P5 - optimized for small objects
-  - [[24, 33, 27, 30], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 4]]]  # Detect(P2, P3, P4, P5)
+  - [[24, 33, 27, 30], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 4]]  # Detect(P2, P3, P4, P5)
