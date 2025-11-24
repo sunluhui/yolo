@@ -1,13 +1,16 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
-# Ultralytics RT-DETR-ResNet50 hybrid object detection model with P3/8 - P5/32 outputs
+# Ultralytics RT-DETR-ResNet50 hybrid object detection model with enhanced small object detection
+# Enhanced for small object detection with P2/4 - P5/32 multi-scale outputs
 # Model docs: https://docs.ultralytics.com/models/rtdetr
 # Task docs: https://docs.ultralytics.com/tasks/detect
+
 # Parameters
 nc: 80 # number of classes
-scales: # model compound scaling constants, i.e. 'model=yolov8n-cls.yaml' will call yolov8-cls.yaml with scale 'n'
+scales: # model compound scaling constants
   # [depth, width, max_channels]
   l: [1.00, 1.00, 1024]
+
 backbone:
   # [from, repeats, module, args]
   - [-1, 1, ConvNormLayer, [32, 3, 2, None, False, 'relu']] # 0-P1/2
@@ -16,37 +19,49 @@ backbone:
   - [-1, 1, nn.MaxPool2d, [3, 2, 1]] # 3-P2/4
 
   - [-1, 1, Blocks, [64, BasicBlock, 2, 2, 'relu']] # 4
-  - [-1, 1, EMA_attention, [64]]
   - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']] # 5-P3/8
-  - [-1, 1, EMA_attention, [128]]
   - [-1, 1, Blocks, [256, BasicBlock, 2, 4, 'relu']] # 6-P4/16
   - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']] # 7-P5/32
 
 head:
-  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 8 input_proj.2
-  - [-1, 1, AIFI, [1024, 8]] # 9
-  - [-1, 1, Conv, [256, 1, 1]]  # 10, Y5, lateral_convs.0
+  # Enhanced feature pyramid for small object detection
+  # Bottom-up path (high-level features)
+  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 8 input_proj.3 (P5)
+  - [-1, 1, AIFI, [1024, 8]] # 9 Transformer encoder
+  - [-1, 1, Conv, [256, 1, 1]]  # 10, Y5
 
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 11
-  - [8, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 12 input_proj.1
+  # FPN top-down path with enhanced connections
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 11 P5 -> P4
+  - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 12 input_proj.2 (P4)
   - [[-2, -1], 1, Concat, [1]] # 13
   - [-1, 3, RepC3, [256, 0.5]]  # 14, fpn_blocks.0
-  - [-1, 1, Conv, [256, 1, 1]]   # 15, Y4, lateral_convs.1
+  - [-1, 1, Conv, [256, 1, 1]]   # 15, Y4
 
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 16
-  - [7, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 17 input_proj.0
-  - [[-2, -1], 1, Concat, [1]]  # 18 cat backbone P4
-  - [-1, 3, RepC3, [256, 0.5]]    # X3 (19), fpn_blocks.1
-  - [-1, 1, EMA_attention, [256]]
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 16 P4 -> P3
+  - [5, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 17 input_proj.1 (P3)
+  - [[-2, -1], 1, Concat, [1]]  # 18
+  - [-1, 3, RepC3, [256, 0.5]]    # 19, fpn_blocks.1
+  - [-1, 1, Conv, [256, 1, 1]]   # 20, Y3
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 20, downsample_convs.0
-  - [[-1, 17], 1, Concat, [1]]  # 21 cat Y4
-  - [-1, 3, RepC3, [256, 0.5]]    # F4 (22), pan_blocks.0
-  - [-1, 1, EMA_attention, [256]]
+  # Additional P2 level for small objects
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 21 P3 -> P2
+  - [3, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 22 input_proj.0 (P2) - using shallower feature
+  - [[-2, -1], 1, Concat, [1]]  # 23
+  - [-1, 3, RepC3, [256, 0.5]]    # 24, fpn_blocks.2
+  - [-1, 1, Conv, [256, 1, 1]]   # 25, Y2
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 23, downsample_convs.1
-  - [[-1, 12], 1, Concat, [1]]  # 24 cat Y5
-  - [-1, 3, RepC3, [256, 0.5]]    # F5 (25), pan_blocks.1
+  # PAN bottom-up path with enhanced connections
+  - [-1, 1, Conv, [256, 3, 2]]   # 26, downsample_convs.0 P2 -> P3
+  - [[-1, 20], 1, Concat, [1]]  # 27 cat Y3
+  - [-1, 3, RepC3, [256, 0.5]]    # 28, pan_blocks.0
 
-  #- [[19, 22, 25], 1, Detect, [nc]] # Detect(P3, P4, P5)
-  - [[22, 26, 29], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(P3, P4, P5)
+  - [-1, 1, Conv, [256, 3, 2]]   # 29, downsample_convs.1 P3 -> P4
+  - [[-1, 15], 1, Concat, [1]]  # 30 cat Y4
+  - [-1, 3, RepC3, [256, 0.5]]    # 31, pan_blocks.1
+
+  - [-1, 1, Conv, [256, 3, 2]]   # 32, downsample_convs.2 P4 -> P5
+  - [[-1, 10], 1, Concat, [1]]  # 33 cat Y5
+  - [-1, 3, RepC3, [256, 0.5]]    # 34, pan_blocks.2
+
+  # Enhanced RT-DETR Decoder with optimized parameters for small objects
+  - [[24, 28, 31, 34], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 4, 0.25]]  # Detect(P2, P3, P4, P5)
