@@ -64,4 +64,4 @@ head:
   - [-1, 3, RepC3, [256, 0.5]]    # 34, pan_blocks.2
 
   # Enhanced RT-DETR Decoder with optimized parameters for small objects
-  - [[24, 28, 31, 34], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 4, 0.25]]  # Detect(P2, P3, P4, P5)
+  - [[24, 28, 31, 34], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 4]]  # Detect(P2, P3, P4, P5)
