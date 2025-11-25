@@ -78,7 +78,7 @@ from .conv import (
     Index,
     LightConv,
     RepConv,
-    SpatialAttention,
+    SpatialAttention, SPDConv,
 )
 from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect
 from .transformer import (
@@ -219,6 +219,7 @@ __all__ = (
     "C2f_AFE",
     "BiFormerBlock",
     "RFAConv_Group",
+    "SPDConv",
 )
 from .CSPPC import CSPPC
 from .ela import ELA

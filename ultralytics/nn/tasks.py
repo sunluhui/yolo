@@ -72,7 +72,7 @@ from ultralytics.nn.modules import (
     v10Detect, EMA_attention, SimAM, Detect_AFPN4, A2C2f, SEBlock, ECABlock, GAMAttention, LightSABlock, SPPCSPC,
     MultiBranchAttention, ChannelAttention, SpatialAttention, LocalContextAttention, GlobalContextAttention, MS_CAM,
     ELA, SBSAtt, FrequencyAttention, ChannelAggregationFFN, CrossModelAtt, EdgeGaussianAggregation, DSAM, FCM, RCSSC,
-    KernelSelectiveFusionAttention, C2f_AFE
+    KernelSelectiveFusionAttention, C2f_AFE, SPDConv
 )
 from ultralytics.nn.modules import DWR  # 显式导入DWR模块
 from ultralytics.nn.modules.bifpn import Fusion
@@ -1161,6 +1161,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = sum(ch[x] for x in f)
         elif m in {EMA_attention}:
             args = [ch[f], *args]
+        elif m is SPDConv:
+            c2 = 4 * ch[f]
         elif m is SwinTransformer_Tiny:
             args = [ch[x] for x in f]
             if not args:
