@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+from einops import rearrange
 from timm.layers import SqueezeExcite
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
@@ -1039,7 +1040,8 @@ class CA_RFA_SPPF(nn.Module):
         )
 
         # 感受野注意力模块 (拼接后)
-        self.rfa = RFAtt(c2, kernels=[3, 5, 7])
+        # self.rfa = RFAtt(c2, kernels=[3, 5, 7])
+        self.rfaconv = RFAConv_Group(c2)
 
         # 残差连接
         self.residual = nn.Conv2d(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
@@ -1072,7 +1074,8 @@ class CA_RFA_SPPF(nn.Module):
         x = self.cv2(x)
 
         # 应用感受野注意力
-        x = self.rfa(x)
+        # x = self.rfa(x)
+        x = self.rfaconv(x)
 
         # 残差连接 + 自适应融合
         return identity + self.alpha * x
@@ -3355,3 +3358,35 @@ class EfficientViMBlock(nn.Module):
 #             x = self.downsample(x)
 #         # return x, x_out, h
 #         return x
+
+class RFAConv_Group(nn.Module):
+    """ 基于Group Conv实现的RFAConv """
+    def __init__(self, in_channel, out_channel, kernel_size=3, stride=1):
+        super().__init__()
+        self.kernel_size = kernel_size
+
+        self.get_weight = nn.Sequential(nn.AvgPool2d(kernel_size=kernel_size, padding=kernel_size // 2, stride=stride),
+                                        nn.Conv2d(in_channel, in_channel * (kernel_size ** 2), kernel_size=1,
+                                                  groups=in_channel, bias=False))
+        self.generate_feature = nn.Sequential(
+            nn.Conv2d(in_channel, in_channel * (kernel_size ** 2), kernel_size=kernel_size, padding=kernel_size // 2,
+                      stride=stride, groups=in_channel, bias=False),
+            nn.BatchNorm2d(in_channel * (kernel_size ** 2)),
+            nn.ReLU())
+
+        self.conv = nn.Sequential(nn.Conv2d(in_channel, out_channel, kernel_size=kernel_size, stride=kernel_size),
+                                  nn.BatchNorm2d(out_channel),
+                                  nn.ReLU())
+
+    def forward(self, x):
+        b, c = x.shape[0:2]
+        weight = self.get_weight(x)
+        h, w = weight.shape[2:]
+        weighted = weight.view(b, c, self.kernel_size ** 2, h, w).softmax(2)  # b c*kernel**2,h,w ->  b c k**2 h w
+        feature = self.generate_feature(x).view(b, c, self.kernel_size ** 2, h,
+                                                w)  # b c*kernel**2,h,w ->  b c k**2 h w   获得感受野空间特征
+        weighted_data = feature * weighted
+        conv_data = rearrange(weighted_data, 'b c (n1 n2) h w -> b c (h n1) (w n2)', n1=self.kernel_size,
+                              # b c k**2 h w ->  b c h*k w*k
+                              n2=self.kernel_size)
+        return self.conv(conv_data)
