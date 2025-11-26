@@ -28,22 +28,29 @@ head:
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 11
   - [6, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 12 input_proj.1
   - [[-2, -1], 1, Concat, [1]] # 13
-  - [-1, 2, RepC3, [256, 0.5]]  # 14, fpn_blocks.0 (减少重复次数以降低复杂度)
+  - [-1, 2, RepC3, [256, 0.5]]  # 14, fpn_blocks.0
   - [-1, 1, Conv, [256, 1, 1]]   # 15, Y4, lateral_convs.1
 
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 16
   - [5, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 17 input_proj.0
-  - [4, 1, Conv, [128, 1, 1, None, 1, 1, False]]  # 18 P2特征投影 (新增P2融合)
+
+  # P2特征融合部分 - 修复尺寸不匹配问题
+  - [4, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 18 P2特征投影到256通道
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 19 上采样P2到P3尺寸
-  - [[-1, 17], 1, Concat, [1]]  # 20 融合P2和P3特征
-  - [-1, 2, RepC3, [256, 0.5]]    # X3 (21), fpn_blocks.1 (减少重复次数)
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 22, downsample_convs.0
-  - [[-1, 15], 1, Concat, [1]]  # 23 cat Y4
-  - [-1, 2, RepC3, [256, 0.5]]    # F4 (24), pan_blocks.0 (减少重复次数)
+  # 确保所有要concat的张量通道数一致
+  - [17, 1, Conv, [128, 1, 1]]  # 20 调整P3特征通道数为128
+  - [19, 1, Conv, [128, 1, 1]]  # 21 调整P2特征通道数为128
+  - [[20, 21], 1, Concat, [1]]  # 22 融合P3和P2特征
 
-  - [-1, 1, Conv, [256, 3, 2]]   # 25, downsample_convs.1
-  - [[-1, 10], 1, Concat, [1]]  # 26 cat Y5
-  - [-1, 2, RepC3, [256, 0.5]]    # F5 (27), pan_blocks.1 (减少重复次数)
+  - [-1, 2, RepC3, [256, 0.5]]    # X3 (23), fpn_blocks.1
 
-  - [[21, 24, 27], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(X3, F4, F5)
+  - [-1, 1, Conv, [256, 3, 2]]   # 24, downsample_convs.0
+  - [[-1, 15], 1, Concat, [1]]  # 25 cat Y4
+  - [-1, 2, RepC3, [256, 0.5]]    # F4 (26), pan_blocks.0
+
+  - [-1, 1, Conv, [256, 3, 2]]   # 27, downsample_convs.1
+  - [[-1, 10], 1, Concat, [1]]  # 28 cat Y5
+  - [-1, 2, RepC3, [256, 0.5]]    # F5 (29), pan_blocks.1
+
+  - [[23, 26, 29], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]  # Detect(X3, F4, F5)
