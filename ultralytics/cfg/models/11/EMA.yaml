@@ -26,7 +26,7 @@ backbone:
 head:
   # Enhanced P2-P3 fusion for small object detection (重点加强小目标检测路径)
   - [5, 1, Conv, [128, 1, 1, None, 1, 1, False]]  # 8, P2 lateral projection
-  - [6, 1, Conv, [128, 1, 1, None, 1, 1, False]]  # 9, P3 lateral projection
+  - [7, 1, Conv, [128, 1, 1, None, 1, 1, False]]  # 9, P3 lateral projection
 
   # P2-P3 fusion with enhanced processing for small objects
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 10, upsample P3 to match P2 spatial size
