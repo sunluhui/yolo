@@ -43,7 +43,7 @@ head:
 
   # Upper pyramid processing (减少大目标路径的复杂度)
   - [9, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 17 input_proj.2
-  - [-1, 1, SBSAtt, []]# - [-1, 1, AIFI, [1024, 8]] # 18
+  - [-1, 1, AIFI, [1024, 8]] # 18- [-1, 1, SBSAtt, []]
   - [-1, 1, Conv, [256, 1, 1]]  # 19, Y5, lateral_convs.0
 
   # P5 to P4 (减少重复次数)
