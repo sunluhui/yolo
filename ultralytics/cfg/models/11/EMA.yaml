@@ -43,7 +43,7 @@ head:
 
   # Upper pyramid processing (减少大目标路径的复杂度)
   - [9, 1, Conv, [256, 1, 1, None, 1, 1, False]]  # 19 input_proj.19
-  - [-1, 1, KernelSelectiveFusionAttention, []] # 20, 局部特征增强20
+  - [-1, 1, RCSSC, []] # 20, 局部特征增强20
   - [-1, 1, AIFI, [1024, 8]] # 21- [-1, 1, SBSAtt, []]21
   - [-1, 1, Conv, [256, 1, 1]]  # 22, Y5, lateral_convs.022
 
