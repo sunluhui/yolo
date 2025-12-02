@@ -384,90 +384,11 @@ class EMA_attention(nn.Module):
         return (group_x * weights.sigmoid()).reshape(b, c, h, w)  # 应用权重并将形状恢复为原始大小
 
 
-# 论文地址：https://arxiv.org/pdf/2208.03641.pdf
-# 代码地址：https://github.com/LabSAINT/SPD-Conv
-
-
-
-# 自动填充函数，用于确保卷积操作后输出的特征图尺寸与输入相同
-def autopad(k, p=None, d=1):  # kernel, padding, dilation
-    """计算填充大小，使得卷积操作后输出尺寸与输入相同。
-
-    参数:
-        k (int or list): 卷积核大小
-        p (int or list, optional): 填充大小，默认为None
-        d (int or list, optional): 膨胀因子，默认为1
-
-    返回:
-        p (int or list): 计算后的填充大小
-    """
-    if d > 1:
-        k = d * (k - 1) + 1 if isinstance(k, int) else [d * (x - 1) + 1 for x in k]  # 计算实际卷积核大小
-    if p is None:
-        p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # 自动计算填充大小
-    return p
-
-
-# 定义SPDConv类，继承自nn.Module
 class SPDConv(nn.Module):
-    """标准卷积层，支持多种参数配置，包括输入通道数、输出通道数、卷积核大小、步幅、填充、分组、膨胀因子和激活函数。
-
-    参数:
-        c1 (int): 输入通道数
-        c2 (int): 输出通道数
-        k (int, optional): 卷积核大小，默认为1
-        s (int, optional): 步幅，默认为1
-        p (int or list, optional): 填充大小，默认为None
-        g (int, optional): 分组数，默认为1
-        d (int or list, optional): 膨胀因子，默认为1
-        act (bool or nn.Module, optional): 是否使用激活函数，默认为True
-    """
-    default_act = nn.SiLU()  # 默认激活函数为SiLU
-
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
-        """初始化卷积层。
-
-        参数:
-            c1 (int): 输入通道数
-            c2 (int): 输出通道数
-            k (int, optional): 卷积核大小，默认为1
-            s (int, optional): 步幅，默认为1
-            p (int or list, optional): 填充大小，默认为None
-            g (int, optional): 分组数，默认为1
-            d (int or list, optional): 膨胀因子，默认为1
-            act (bool or nn.Module, optional): 是否使用激活函数，默认为True
-        """
+    def __init__(self,dimension=1):
         super().__init__()
-        c1 = c1 * 4  # 将输入通道数乘以4
-        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)  # 定义卷积层
-        self.bn = nn.BatchNorm2d(c2)  # 定义批量归一化层
-        self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()  # 定义激活函数
+        self.d = dimension
+    def forward(self,x):
+        return torch.cat([x[...,::2,::2],x[...,1::2,::2],x[...,::2,1::2],x[...,1::2,1::2]],1)
 
-    def forward(self, x):
-        """前向传播函数，对输入进行卷积、批量归一化和激活操作。
-
-        参数:
-            x (torch.Tensor): 输入张量
-
-        返回:
-            torch.Tensor: 处理后的张量
-        """
-        # 将输入张量按通道维度进行切片并拼接，增加通道数
-        x = torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1)
-        # 应用卷积、批量归一化和激活函数
-        return self.act(self.bn(self.conv(x)))
-
-    def forward_fuse(self, x):
-        """前向传播函数（融合版本），对输入进行卷积和激活操作，不包含批量归一化。
-
-        参数:
-            x (torch.Tensor): 输入张量
-
-        返回:
-            torch.Tensor: 处理后的张量
-        """
-        # 将输入张量按通道维度进行切片并拼接，增加通道数
-        x = torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1)
-        # 应用卷积和激活函数
-        return self.act(self.conv(x))
 
