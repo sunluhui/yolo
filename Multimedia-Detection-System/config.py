@@ -13,7 +13,7 @@ class Config:
     CAMERA_RESULTS_DIR = os.path.join(RESULTS_DIR, 'camera')
 
     # 模型配置
-    MODEL_PATH = 'yolov8n.pt'
+    MODEL_PATH = 'best.pt'#'yolov8n.pt'
     CONFIDENCE_THRESHOLD = 0.5
 
     # 界面配置
