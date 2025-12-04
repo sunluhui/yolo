@@ -13,7 +13,14 @@ class Config:
     CAMERA_RESULTS_DIR = os.path.join(RESULTS_DIR, 'camera')
 
     # 模型配置
-    MODEL_PATH = 'best.pt'#'yolov8n.pt'
+    # 使用说明：
+    # 1. 默认使用 yolov8n.pt (预训练的YOLOv8 nano模型)
+    # 2. 如果要使用自己的模型，请将模型文件(.pt)放到此目录，并修改下面的路径
+    # 3. 模型文件路径可以是相对路径或绝对路径
+    # 示例：
+    #   MODEL_PATH = 'my_custom_model.pt'  # 使用当前目录下的自定义模型
+    #   MODEL_PATH = '/path/to/my/best.pt'  # 使用绝对路径的模型
+    MODEL_PATH = 'yolov8n.pt'#'/home/a10/slh/yolo/runs/detect/train195/weights/best.pt'
     CONFIDENCE_THRESHOLD = 0.5
 
     # 界面配置
