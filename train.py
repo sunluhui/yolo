@@ -5,7 +5,7 @@ import torch
 from ultralytics import YOLO
 from ultralytics import RTDETR
 # 加载配置xaaaaa
-model = YOLO(model='yolo11.yaml', task='detect')
+model = YOLO(model='yolov10m.yaml', task='detect')
 torch.use_deterministic_algorithms(False)
 # 训练参数
 model.train(
