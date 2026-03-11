@@ -32,6 +32,7 @@ head:
   - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 10, upsample P3 to match P2 spatial size12
   - [[10, -1], 1, Concat, [1]] # 11, concat P2 and upsampled P313
   - [-1, 3, RepC3, [256, 0.5]]  # 12, fused P2-P3 features (保持3次重复，加强小目标特征)14
+  - 此处添加deepseek中的ARConv修改版！！！！！！！！！！
 
   # Downsample fused features to P3 size
   - [-1, 1, Conv, [256, 3, 2]]   # 13, downsample to P3/815
