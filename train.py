@@ -4,7 +4,7 @@ import torch
 
 from ultralytics import YOLO
 from ultralytics import RTDETR
-# 加载配置xaaaaa   coco泛化实验+拟加的创新点三实验
+# 加载配置xaaaaa   coco泛化实验+拟加的创新点三实验s
 model = YOLO(model='yolo11.yaml', task='detect')
 torch.use_deterministic_algorithms(False)
 # 训练参数
