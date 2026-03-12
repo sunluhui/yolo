@@ -5,13 +5,13 @@ import torch
 from ultralytics import YOLO
 from ultralytics import RTDETR
 # 加载配置xaaaaa   coco泛化实验+拟加的创新点三实验s
-model = YOLO(model='runs/detect/train511/weights/best.pt', task='detect')
+model = YOLO(model='YOLO26.yaml', task='detect')
 
 torch.use_deterministic_algorithms(False)
 # 训练参数
 model.train(
     data='coco.yaml',  # 数据集配置文件
-    epochs=60,
+    epochs=40,
     imgsz=640,
     batch=8, # 8主数据集, # 可设置为更小的，占据更少的空间。下面的为rtdetr的配置。还得修改训练和测试集的文件头
     optimizer='AdamW',
