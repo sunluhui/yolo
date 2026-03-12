@@ -105,7 +105,7 @@ from ultralytics.utils.torch_utils import (
 from .Extramodule.CARAFE import CARAFE
 from .Extramodule.revcol import RevCol
 from .modules.dynamic_snake_conv import DynamicSnakeConv
-from .modules.head import RTDETR_position_Decoder
+
 
 
 class BaseModel(torch.nn.Module):
