@@ -105,6 +105,7 @@ from ultralytics.utils.torch_utils import (
 from .Extramodule.CARAFE import CARAFE
 from .Extramodule.revcol import RevCol
 from .modules.dynamic_snake_conv import DynamicSnakeConv
+from .modules.head import RTDETR_position_Decoder
 
 
 class BaseModel(torch.nn.Module):
@@ -1136,7 +1137,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
             if m in {Detect, Segment, Pose, OBB}:
                 m.legacy = legacy
-        elif m is RTDETRDecoder:  # special case, channels arg must be passed in index 1
+        elif m in (RTDETRDecoder, RTDETR_position_Decoder):  # special case, channels arg must be passed in index 1
             args.insert(1, [ch[x] for x in f])
         elif m is CBLinear:
             c2 = args[0]
