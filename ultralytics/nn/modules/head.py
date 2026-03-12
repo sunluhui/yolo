@@ -12,10 +12,10 @@ from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, make_anchors
 
 from .block import DFL, BNContrastiveHead, ContrastiveHead, Proto
 from .conv import Conv, DWConv
-from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer, Deformable_position_TransformerDecoder
+from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
-__all__ = "Detect", "Segment", "Pose", "Classify", "OBB", "RTDETRDecoder", "v10Detect","RTDETR_position_Decoder"
+__all__ = "Detect", "Segment", "Pose", "Classify", "OBB", "RTDETRDecoder", "v10Detect"
 
 
 class Detect(nn.Module):
