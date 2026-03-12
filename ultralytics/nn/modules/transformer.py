@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.nn.init import constant_, xavier_uniform_
 
 from .conv import Conv
-from .position_encoding import Conv2dNormActivation
+
 from .utils import _get_clones, inverse_sigmoid, multi_scale_deformable_attn_pytorch
 
 __all__ = (
