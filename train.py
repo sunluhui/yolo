@@ -5,12 +5,11 @@ import torch
 from ultralytics import YOLO
 from ultralytics import RTDETR
 # 加载配置xaaaaa   coco泛化实验+拟加的创新点三实验s
-model = YOLO(model='runs/detect/train519/weights/last.pt')#, task='detect')
+model = YOLO(model='yolo11.yaml', task='detect')
 
 torch.use_deterministic_algorithms(False)
 # 训练参数
 model.train(
-    resume=True,
     data='coco.yaml',  # 数据集配置文件
     epochs=100,
     imgsz=640,
