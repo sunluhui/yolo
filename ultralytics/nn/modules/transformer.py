@@ -1080,7 +1080,7 @@ class RCSSC(nn.Module):
 
 
 class KernelSelectiveFusionAttention(nn.Module):
-    def __init__(self, dim, r=16, L=32):
+    def __init__(self, dim, r=8, L=32):
         super().__init__()
         d = max(dim // r, L)
         self.conv0 = nn.Conv2d(dim, dim, 3, padding=1, groups=dim)
@@ -1113,6 +1113,7 @@ class KernelSelectiveFusionAttention(nn.Module):
         avg_attn = torch.mean(attn, dim=1, keepdim=True)  # b,1,h,w
         max_attn, _ = torch.max(attn, dim=1, keepdim=True)  # b,1,h,w
         agg = torch.cat([avg_attn, max_attn], dim=1)  # spa b,2,h,w
+        agg = self.conv_squeeze(agg)
 
         ch_attn1 = self.global_pool(attn)  # b,dim,1, 1
         z = self.fc1(ch_attn1)

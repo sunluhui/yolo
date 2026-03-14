@@ -3,13 +3,13 @@
 from ultralytics import RTDETR
 from ultralytics import YOLO
 # 加载训练好的模型（必须使用RTDETR类加载RT-DETR模型）
-model = YOLO('runs/detect/train511/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
+model = RTDETR('runs/detect/train511/weights/best.pt')  # 每次训练完进行测试时，必须修改测试模型的路径
 #model = YOLO("yolo26n.pt")
 
 # 在测试集上进行评估
 metrics = model.val(
-    data='coco.yaml',  # 数据集配置文件路径
-    split='val',  # 指定使用测试集
+    data='VisDrone.yaml',  # 数据集配置文件路径
+    split='test',  # 指定使用测试集
 )
 
 # 输出评估指标
